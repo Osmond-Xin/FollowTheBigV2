@@ -33,3 +33,6 @@ description: 三方异构红队（opencode/MiniMax · agy/Gemini · codex/OpenAI
 - macOS 自带 bash 3.2：脚本里不能用关联数组；`$var` 后紧跟中文全角字符会被吞进变量名，一律写 `${var}`。
 - opencode 的 `-f` 是数组参数，message 必须写在 `-f` 之前；agy 只接受 argv 提示词；codex 后台化时 stdin 必须 `- < prompt` 显式喂。
 - 模型常把裁决与总结写在同一行，脚本取末尾三个非空行里最后一次匹配。
+- 对象上限 200 KB 是硬的：相对 main 的 diff 太大时（例如整条功能分支），把源码打包成简报走 `design` 模式，测试与文档留在仓库里让 agentic 两路自己读。
+- agy 无头模式读不了文件也写不了文件：对象必须内联，让它回传代码块；opencode plan agent 同理，要它给代码要明说「不要调用 bash」。
+- MiniMax 的结构化输出若以 `[` 开头会只回一个 `[` 就停，要它输出 JSON 时用对象包裹。

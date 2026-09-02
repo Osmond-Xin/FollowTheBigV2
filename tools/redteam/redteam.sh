@@ -76,7 +76,7 @@ sha() { shasum -a 256 "$1" | cut -c1-64; }
 fan_out() {  # $1=对象文件  $2=模式说明  $3=输出目录  $4=文件名前缀（可空）  → 设置 BLOCK
   local obj="$1" note="$2" out="$3" prefix="$4"
   local bytes; bytes=$(wc -c < "$obj")
-  [ "$bytes" -le "$MAX" ] || die "对象 $bytes 字节超过上限 $MAX：拆 commit，不要调上限"
+  [ "$bytes" -le "$MAX" ] || die "对象 $bytes 字节超过上限 ${MAX}：拆 commit，不要调上限"
   mkdir -p "$out"
   local -a pids=() dests=() names=()
   for r in "${RUNNERS[@]}"; do
