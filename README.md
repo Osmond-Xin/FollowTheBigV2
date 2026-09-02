@@ -17,22 +17,20 @@ FollowTheBig（V1）的推倒重建。研究目标不变——从 A 股 Level-2 
 
 ## 现在处于什么阶段
 
-**设计阶段收口，仓库与门禁已立，尚未写一行业务代码。** 所有设计决策（Q1–Q18 + 红队后九条）见 `design-log/2026-09-01-立项讨论.md`；
-深模块评审的四条高优先级已采纳（`design-log/2026-09-01-深模块评审.md`），中低项待裁决。
+**第一块代码已落：原始层（摄取 + 存储访问）。** 设计决策见 `design-log/2026-09-01-立项讨论.md`；深模块评审四条高优先级已采纳，中低项待裁决；
+第一轮实施的完整过程与未竟事项见 `design-log/2026-09-02-原始层第一轮实施.md`——**新 session 先读它**。
 
 - 仓库：`github.com/Osmond-Xin/FollowTheBigV2`（公开）。main 受 ruleset 保护：只能经 PR 合入，须通过 `gate` 检查，禁止 force-push 与删除。
+- 分支：`raw/consolidate` = 原始层实现 + 三层测试（契约 45 / 敌对 27 / 探针 28），门禁全绿，待合并。
 - 包：`src/ftbv2/core`（纯逻辑核）/ `src/ftbv2/io`（IO 层）。import-linter 硬拒 core → io。
 - 门禁：`bash tools/gate.sh`（ruff · import-linter · 私有 import · 词汇 · pytest），CI 同一入口（`.github/workflows/gate.yml`）。
   词汇门禁需要 `MINIMAX_API_KEY`（本机读 `~/.mmx/config.json`，CI 读仓库 secret）；判定不可用即门禁失败。
-- CRAP：`crapkit.toml`，只用 ratchet（基线已冻）。`uv run crapkit verify`。
-- 红队：`/redteam` skill → `tools/redteam/redteam.sh`，mmx / agy / codex 三路并行，攻击面在 `tools/redteam/lens/`。
+- CRAP：`crapkit.toml`，只用 ratchet；基线已在第一批纯核代码入库后重冻。`uv run crapkit verify`。
+- 红队 / 加固 review：`/redteam` skill → `tools/redteam/redteam.sh`，opencode(MiniMax) / agy / codex 三路并行，攻击面在 `tools/redteam/lens/`。
+- 开发流程（用户裁定）：接口 owner 写接口与契约测试 → 三方红队攻接口 → 人签字 → codex 在隔离 worktree 实现 →
+  agy 只凭接口写敌对测试 → MiniMax 写探针测试 → code-review skill → 巩固 → 三方复审 → PR。
 
-**卡点**：三个必测数字——事件流实际体积 / 一次全量提取耗时 / 「宽而中性」的宽度——
-20 个交易日、1 个 stream 跑一遍即得。**但机器上可能有 V1 的生产作业在读同一块 USB 盘**
-（`rebuild_keep_locked.py`），且项目有 kernel panic 前科。**动盘前先 `ps`。**
-
-**第一步**（已定）：codex 窄实验工厂——3–5 天扫描闭环 / 1–2 周账本进 CI / 3–4 周第一个假设。
-此前不建多 agent 流水线、不建收据、不建 runner 编排。
+**卡点**：V1 生产作业仍占外置盘（动盘前先 `ps`）。真实数据金标准、三个必测数字、日级参考层都等它结束。
 
 ## 硬规则速查
 
