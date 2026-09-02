@@ -13,15 +13,16 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import subprocess
 import sys
 import tomllib
 from pathlib import Path
 
-from ftbv2.core.raw.ledger import DefectCode, parse_ledger
+from ftbv2.core.raw.ledger import LIVE, DefectCode, parse_ledger
 
-IMMUTABLE = ("code", "kind", "stream", "created_at", "evidence")
-TRANSITIONS = {("pending", "active"), ("active", "superseded"), ("pending", "superseded")}
+IMMUTABLE = ("code", "kind", "stream", "created_at", "evidence", "decision_ref")
+TRANSITIONS = {("pending", "active"), ("active", "superseded"), ("pending", "rejected")}
 
 
 def validate(text: str) -> list[str]:
@@ -30,12 +31,11 @@ def validate(text: str) -> list[str]:
         ledger = parse_ledger(text)
     except (ValueError, KeyError, tomllib.TOMLDecodeError) as exc:
         return [f"账本解析失败：{exc}"]
-    codes = {d.code for d in ledger.entries}
+    live = {d.code for d in ledger.entries if d.status in LIVE}
+    enum = {c.value for c in DefectCode}
     problems = []
-    if codes != set(DefectCode):
-        only_code = sorted(c.value for c in set(DefectCode) - codes)
-        only_ledger = sorted(c.value for c in codes - set(DefectCode))
-        problems.append(f"代码枚举与账本 code 集合不相等：只在代码 {only_code}，只在账本 {only_ledger}")
+    if live != enum:
+        problems.append(f"代码枚举必须等于账本 active ∪ pending 的 code 集合：只在代码 {sorted(enum - live)}，只在账本 {sorted(live - enum)}")
     return problems
 
 
@@ -45,8 +45,13 @@ def _rows(text: str) -> dict[str, dict]:
     return {str(r["id"]): r for r in rows if "id" in r}
 
 
-def _days(row: dict) -> set[str]:
-    return {str(d) for d in row.get("days", [])}
+def _norm(value: object) -> object:
+    """日期按 ISO 日期字符串比较；datetime 不归一化成 date（严格解析会先把它拒掉）。"""
+    return value.isoformat() if type(value) is dt.date else value
+
+
+def _days(row: dict) -> set[object]:
+    return {_norm(d) for d in row.get("days", [])}
 
 
 def compare(old_text: str, new_text: str) -> list[str]:
@@ -59,7 +64,7 @@ def compare(old_text: str, new_text: str) -> list[str]:
             problems.append(f"{ident}：账本 append-only，禁止删除条目")
             continue
         for field_name in IMMUTABLE:
-            if field_name in before and str(before[field_name]) != str(after.get(field_name)):
+            if field_name in before and _norm(before[field_name]) != _norm(after.get(field_name)):
                 problems.append(f"{ident}：{field_name} 不可改（{before[field_name]!r} → {after.get(field_name)!r}）")
         if not _days(before) <= _days(after):
             problems.append(f"{ident}：days 只许并集，不许删天")
@@ -74,33 +79,48 @@ def compare(old_text: str, new_text: str) -> list[str]:
 def check_observed(ledger_text: str, observed_dir: Path) -> list[str]:
     if not observed_dir.is_dir():
         return []
-    registered = {d.code.value for d in parse_ledger(ledger_text).entries}
+    registered = {d.code for d in parse_ledger(ledger_text).entries if d.status == "active"}   # 只有 active 算已登记
     problems = []
     for f in sorted(observed_dir.glob("*.toml")):
-        codes = set(tomllib.loads(f.read_text(encoding="utf-8")).get("codes", []))
+        try:
+            codes = set(tomllib.loads(f.read_text(encoding="utf-8")).get("codes", []))
+        except (tomllib.TOMLDecodeError, OSError) as exc:
+            problems.append(f"{f}：观测文件不可解析（{exc}），fail-closed")
+            continue
         unknown = sorted(codes - registered)
         if unknown:
-            problems.append(f"{f}：观测到未登记的 code {unknown}")
+            problems.append(f"{f}：观测到未登记（非 active）的 code {unknown}")
     return problems
 
 
-def _baseline(base: str, path: str) -> str | None:
-    r = subprocess.run(["git", "show", f"{base}:{path}"], capture_output=True, text=True)
-    return r.stdout if r.returncode == 0 else None
+def _baseline(path: str, unsafe_base: str | None) -> tuple[str, str] | None:
+    """基线 = `merge-base HEAD origin/main` 那一版账本（受保护 main 的祖先），不接受环境变量覆盖；
+    --unsafe-base 只给本地调试，gate.sh 不透传。返回 (oid, 文本)。"""
+    if unsafe_base is None:
+        mb = subprocess.run(["git", "merge-base", "HEAD", "origin/main"], capture_output=True, text=True)
+        if mb.returncode != 0:
+            return None
+        oid = mb.stdout.strip()
+    else:
+        oid = unsafe_base
+    r = subprocess.run(["git", "show", f"{oid}:{path}"], capture_output=True, text=True)
+    return (oid, r.stdout) if r.returncode == 0 else None
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("path", nargs="?", default="ledger/defects.toml")
-    ap.add_argument("--base", default="origin/main")
+    ap.add_argument("--unsafe-base", default=None, help="仅本地调试：覆盖基线 ref。CI / gate.sh 不得使用")
     args = ap.parse_args()
     text = Path(args.path).read_text(encoding="utf-8")
     problems = validate(text)
     if not problems:
-        old = _baseline(args.base, args.path)
-        if old is None:
-            print(f"账本基线 {args.base}:{args.path} 不可得，门禁 fail-closed", file=sys.stderr)
+        found = _baseline(args.path, args.unsafe_base)
+        if found is None:
+            print(f"账本基线（merge-base HEAD origin/main）:{args.path} 不可得，门禁 fail-closed", file=sys.stderr)
             return 2
+        oid, old = found
+        print(f"账本基线：{oid[:12]}" + ("（--unsafe-base，仅调试）" if args.unsafe_base else "（merge-base HEAD origin/main）"))
         try:
             problems += compare(old, text)
         except (tomllib.TOMLDecodeError, KeyError) as exc:

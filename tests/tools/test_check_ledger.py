@@ -12,7 +12,7 @@ from tools.check_ledger import check_observed, compare, validate
 FULL = {c.value: i for i, c in enumerate(DefectCode, 1)}
 
 
-def entry(ident: str, code: str, *, days: str = "", status: str = "active", extra: str = "", note: str = "n",
+def entry(ident: str, code: str, *, days: str = "2024-01-02", status: str = "active", extra: str = "", note: str = "n",
           created: str = "2026-09-01", evidence: str = "e") -> str:
     body = f'[[defect]]\nid = "{ident}"\ncode = "{code}"\nkind = "defect"\n'
     if days:
@@ -29,10 +29,33 @@ def test_real_ledger_validates():
     assert validate(Path("ledger/defects.toml").read_text(encoding="utf-8")) == []
 
 
-def test_enum_must_equal_ledger_codes():
+def test_enum_must_equal_live_ledger_codes():
     text = "".join(entry(f"D{i:03d}", code) for code, i in FULL.items() if code != "seq_empty")
     (problem,) = validate(text)
     assert "只在代码 ['seq_empty']" in problem
+    # superseded / rejected 的 code 不进枚举：把 seq_empty 标成 rejected 后，枚举里多出的 seq_empty 就是违规
+    rejected = full_ledger(seq_empty=entry("D002", "seq_empty", status="rejected"))
+    assert any("只在代码 ['seq_empty']" in p for p in validate(rejected))
+    # superseded 条目的 code 可以是枚举里没有的字符串
+    gone = full_ledger(seq_empty=entry("D002", "seq_empty_old", status="superseded", extra='superseded_by = "D001"\n'))
+    assert any("只在代码 ['seq_empty']" in p for p in validate(gone))
+
+
+def test_datetime_is_rejected_as_day():
+    text = full_ledger(seq_empty=entry("D002", "seq_empty", days="2024-02-06T00:00:00Z"))
+    assert "带时间" in validate(text)[0]
+
+
+def test_patch_and_gap_require_days():
+    body = entry("D002", "seq_empty").replace("days = [2024-01-02]\n", "")   # gap 却没有 days
+    assert "必须按天登记" in validate(full_ledger(seq_empty=body))[0]
+
+
+def test_active_shape_requires_decision_ref():
+    shape = entry("D002", "seq_empty", days="2024-02-06").replace('kind = "defect"', 'kind = "shape"')
+    assert "decision_ref" in validate(full_ledger(seq_empty=shape))[0]
+    ok = shape.replace('note = "n"', 'decision_ref = "design-log/x.md"\nnote = "n"')
+    assert validate(full_ledger(seq_empty=ok)) == []
 
 
 def test_parse_errors_are_reported_not_raised():
@@ -58,8 +81,9 @@ def test_days_only_grow_and_note_is_free():
 
 
 @pytest.mark.parametrize(("before", "after", "ok"), [
-    ("pending", "active", True), ("active", "superseded", True), ("pending", "superseded", True),
-    ("active", "pending", False), ("superseded", "active", False),
+    ("pending", "active", True), ("active", "superseded", True), ("pending", "rejected", True),
+    ("pending", "superseded", False), ("active", "pending", False), ("superseded", "active", False),
+    ("rejected", "active", False),
 ])
 def test_status_transitions(before, after, ok):
     def e(status):
@@ -77,8 +101,11 @@ def test_superseded_by_must_exist_and_is_immutable():
     assert any("superseded_by 一旦设置不可改" in p for p in compare(old, moved))
 
 
-def test_observed_codes_must_be_registered(tmp_path):
-    (tmp_path / "scan.toml").write_text('codes = ["seq_empty", "never_seen"]\n', encoding="utf-8")
-    (problem,) = check_observed(full_ledger(), tmp_path)
-    assert "never_seen" in problem
+def test_observed_codes_must_be_active_registered(tmp_path):
+    (tmp_path / "scan.toml").write_text('codes = ["seq_empty", "never_seen", "rescue_partial"]\n', encoding="utf-8")
+    ledger = full_ledger(rescue_partial=entry("D004", "rescue_partial", status="pending"))
+    (problem,) = check_observed(ledger, tmp_path)
+    assert "never_seen" in problem and "rescue_partial" in problem      # pending 不算已登记
     assert check_observed(full_ledger(), tmp_path / "missing") == []
+    (tmp_path / "bad.toml").write_text("codes = [", encoding="utf-8")
+    assert any("不可解析" in p for p in check_observed(full_ledger(), tmp_path))

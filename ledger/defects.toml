@@ -3,7 +3,8 @@
 #       superseded_by · created_at · evidence(收据 id 或 design-log 引用) · read_layer_action(patch|gap|none) · note。
 # 语义 append-only（tools/check_ledger.py）：禁删 id；禁改 code/kind/stream/created_at/evidence；days 只许并集；
 # 状态只许 pending→active→superseded；废弃只能 superseded_by 指向已存在 id，原条目保留。日期 ISO。
-# 待裁决的形状只能 pending；转 active 须在 note 写裁决出处。收据 id 在收据规则（工程管束 R1）落地前用 design-log 引用。
+# 待裁决的形状只能 pending；形状转 active 必须带 decision_ref（裁决出处）；pending 可 rejected（写理由）。patch / gap 必须有 days。
+# 状态只许 pending→active / pending→rejected / active→superseded；代码枚举 = active ∪ pending 的 code 集合。收据 id 在收据规则（工程管束 R1）落地前用 design-log 引用。
 
 [[defect]]
 id = "D001"
@@ -92,6 +93,7 @@ stream = "xinqing"
 status = "active"
 created_at = 2026-09-02
 evidence = "design-log/2026-09-02-原始层第一轮实施.md（20220104 6 只 / 20220505 72 只重摄验证）"
+decision_ref = "design-log/2026-09-02-原始层第一轮实施.md（2026-09-02 用户裁定方案 A）"
 read_layer_action = "none"
 note = "停牌心跳：标的只有行情（每分钟一条、价格与十档全 0），无委托无成交。摄取放行并记入收据 quote_only_symbols；只进 xinqing。none = 保留并打标，下游由样本宇宙消费。每天约 6 只（V1 全语料均值 3.0）"
 
@@ -101,11 +103,11 @@ code = "empty_file"
 kind = "shape"
 stream = "xinqing"
 days = [2022-06-27]
-status = "active"
+status = "pending"
 created_at = 2026-09-02
 evidence = "design-log/2026-09-02-V1入库程序复审.md（605222.SH/行情.csv 在 7z 内 Size=0，当天 orders 11,154 / trades 7,224 行）"
 read_layer_action = "none"
-note = "0 字节 CSV（连表头都没有）：厂商导出缺陷，该股当天其他两流正常。2026-09-02 用户裁定：登记进收据 empty_files，该标的不进该 stream；V1 静默排除。stream = 已观测到的流；新观测加 days"
+note = "0 字节 CSV（连表头都没有）：厂商导出缺陷，该股当天其他两流正常。2026-09-02 用户裁定：登记进收据 empty_files，该标的不进该 stream；V1 静默排除。pending 直到收据字段 IngestReceipt.empty_files 落地（工程管束第 2 步），届时转 active 并写 decision_ref。stream = 已观测到的流；新观测加 days"
 
 [[defect]]
 id = "D010"
@@ -126,6 +128,7 @@ days = [
 status = "active"
 created_at = 2026-09-02
 evidence = "V1 manifest n_cols（orders 11 / trades 13 / xinqing 67）+ 盘口不变量抽验（design-log/2026-09-02-V1入库程序复审.md）"
+decision_ref = "design-log/2026-09-02-工程管束方案.md 第一步（2026-09-02 用户裁定执行；良性形状，action = none）"
 read_layer_action = "none"
 note = "三条流各少尾逗号幽灵列，语义未错位；枚举空值是 null 而非空格——读取层保持原值，下游把 ' ' / '' / null 视为同一无值"
 
@@ -153,6 +156,7 @@ days = [
 status = "active"
 created_at = 2026-09-02
 evidence = "design-log/2026-09-02-时间形状扫描.tsv（8 位占比 0 的天，三条流一致）"
+decision_ref = "design-log/2026-09-02-工程管束方案.md 第一步（2026-09-02 用户裁定执行；良性形状，action = none）"
 read_layer_action = "none"
 note = "时间全带前导零（其余天 8 位占 13%–43%）。202604 导出程序指纹：与 no_trailing_comma、扁平布局同批。解码不受影响"
 
@@ -164,5 +168,6 @@ stream = "xinqing"
 status = "active"
 created_at = 2026-09-02
 evidence = "docs/数据表.html 第六节 A 组（V1 window_factors 去重原文）"
+decision_ref = "docs/数据表.html 第六节 A 组（V1 去重原文；事件提取须处理，2026-09-02 登记）"
 read_layer_action = "none"
 note = "供应商在 09:30 / 13:00 每股各发两帧重复开盘快照。preserve 不删行；事件提取的切割规则必须处理（事件注册表）"

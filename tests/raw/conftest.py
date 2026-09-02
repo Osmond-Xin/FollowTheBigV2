@@ -31,6 +31,8 @@ def ledger_toml(*entries: str) -> str:
         defaults = dict(_DEFAULTS)
         if 'code = "time_6digit"' in e:
             defaults["read_layer_action"] = '"patch"'
+        elif "days" not in given:
+            defaults["read_layer_action"] = '"none"'          # 结构性条目不按天归因
         extra = "".join(f"{k} = {v}\n" for k, v in defaults.items() if k not in given)
         out.append(f"[[defect]]\nid = \"D{i:03d}\"\n{e}\n{extra}\n")
     return "".join(out)

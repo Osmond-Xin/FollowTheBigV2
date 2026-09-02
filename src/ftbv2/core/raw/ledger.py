@@ -4,7 +4,9 @@
 账本文件 ledger/defects.toml（纯数据，git 跟踪，事实单源）。本模块只解析文本（纯），读文件是 IO 层的事。
 每条：id · code · kind(defect|shape) · stream · days|结构性 · status(pending|active|superseded) · superseded_by ·
 created_at · evidence · read_layer_action(patch|gap|none) · note。
-- 读取层只看 **active** 条目：pending 是待裁决（不得作为数据或门禁依据），superseded 已被替换；
+- 读取层只看 **active** 条目：pending 是待裁决（不得作为数据或门禁依据），rejected 已否决，superseded 已被替换；
+- 形状（kind = shape）转 active 必须带 decision_ref（裁决出处）；patch / gap 必须按天登记（非空 days）；
+- 代码枚举 DefectCode = active ∪ pending 的 code 集合；superseded / rejected 的 code 只作字符串保留在账本，不进枚举；
 - `read_layer_action`：patch = 改变解码行为；gap = 缺口归因时转述；none = 保留并打标，下游由样本宇宙消费；
 - 代码里的 DefectCode 枚举只是账本 code 集合的投影，CI 校验两者相等（tools/check_ledger.py）；
 - 账本 append-only 是语义级的（按 id 比较，不是文本 diff）：禁删 id、禁改 code/kind/stream/created_at/evidence、
@@ -40,7 +42,8 @@ class DefectCode(Enum):
 
 
 KINDS = ("defect", "shape")
-STATUSES = ("pending", "active", "superseded")
+STATUSES = ("pending", "active", "rejected", "superseded")
+LIVE = ("active", "pending")          # 进代码枚举的状态
 ACTIONS = ("patch", "gap", "none")
 REQUIRED = ("id", "code", "kind", "status", "created_at", "evidence", "read_layer_action")
 
@@ -48,7 +51,7 @@ REQUIRED = ("id", "code", "kind", "status", "created_at", "evidence", "read_laye
 @dataclass(frozen=True)
 class Defect:
     id: str                        # 稳定主键；语义 append-only 按它比较
-    code: DefectCode
+    code: str                      # active / pending 时必在 DefectCode 值域；superseded / rejected 只作字符串保留
     stream: Stream | None          # None = 三个 stream 都受影响
     days: tuple[dt.date, ...]      # 空元组 = 结构性、对所有天成立
     kind: str = "defect"
@@ -57,6 +60,7 @@ class Defect:
     created_at: dt.date | None = None
     evidence: str = ""             # 收据 id 或 design-log 引用
     read_layer_action: str = "gap"
+    decision_ref: str | None = None   # 形状转 active 的裁决出处（design-log / PR）
     note: str = ""
 
 
@@ -79,20 +83,25 @@ class DefectLedger:
         """该天该 stream **按天登记**且读取层要理会（action ≠ none）的码，去重保序。缺口归因用它。"""
         out: list[str] = []
         for d in self.for_day(day, stream):
-            if d.days and d.read_layer_action != "none" and d.code.value not in out:
-                out.append(d.code.value)
+            if d.days and d.read_layer_action != "none" and d.code not in out:
+                out.append(d.code)
         return tuple(out)
 
     def patches(self, day: dt.date, stream: Stream) -> tuple[str, ...]:
         """该天该 stream 触发的补丁码（account 里 read_layer_action = patch 的按天条目）。"""
-        return tuple(
-            d.code.value for d in self.for_day(day, stream)
-            if d.days and d.read_layer_action == "patch"
-        )
+        return tuple(d.code for d in self.for_day(day, stream) if d.days and d.read_layer_action == "patch")
 
 
 def _date(value: object) -> dt.date:
-    return value if isinstance(value, dt.date) else dt.date.fromisoformat(str(value))
+    """只接受精确的日期：TOML 的 datetime（date 的子类）会让 `day in days` 永远不命中，必须拒绝。"""
+    if isinstance(value, dt.datetime):
+        raise ValueError(f"账本日期必须是 YYYY-MM-DD，不接受带时间的 {value!r}")
+    if isinstance(value, dt.date):
+        return value
+    text = str(value)
+    if len(text) != 10:
+        raise ValueError(f"账本日期必须是 YYYY-MM-DD：{text!r}")
+    return dt.date.fromisoformat(text)
 
 
 def _parse_entry(n: int, row: dict) -> Defect:
@@ -103,18 +112,23 @@ def _parse_entry(n: int, row: dict) -> Defect:
     stream = row.get("stream")
     if stream is not None and stream not in STREAMS:
         raise ValueError(f"账本里未知的 stream {stream!r}（合法值 {STREAMS}）")
-    code = DefectCode(row["code"])
     missing = [k for k in REQUIRED if k not in row]
     if missing:
         raise ValueError(f"账本 {ident} 缺字段 {missing}")
-    kind, status, action = row["kind"], row["status"], row["read_layer_action"]
+    code, kind, status, action = str(row["code"]), row["kind"], row["status"], row["read_layer_action"]
     if kind not in KINDS or status not in STATUSES or action not in ACTIONS:
         raise ValueError(f"账本 {ident} 的 kind/status/read_layer_action 不在登记值域：{kind}/{status}/{action}")
+    if status in LIVE:
+        DefectCode(code)                                  # 未知 code 在这里抛 ValueError
     if (status == "superseded") != ("superseded_by" in row):
         raise ValueError(f"账本 {ident}：superseded 与 superseded_by 必须同时出现")
     days = tuple(_date(d) for d in row.get("days", []))
-    return Defect(ident, code, stream, days, kind, status, row.get("superseded_by"),
-                  _date(row["created_at"]), str(row["evidence"]), action, row.get("note", ""))
+    if action in ("patch", "gap") and not days:
+        raise ValueError(f"账本 {ident}：read_layer_action = {action} 必须按天登记（非空 days），否则运行时永远不触发")
+    if kind == "shape" and status == "active" and not row.get("decision_ref"):
+        raise ValueError(f"账本 {ident}：形状转 active 必须带 decision_ref（裁决出处）")
+    return Defect(ident, code, stream, days, kind, status, row.get("superseded_by"), _date(row["created_at"]),
+                  str(row["evidence"]), action, row.get("decision_ref"), row.get("note", ""))
 
 
 def parse_ledger(text: str) -> DefectLedger:

@@ -437,15 +437,15 @@ def test_adv_gap_defects_filtered_strictly_by_stream_and_day():
     )
     custom_ledger = parse_ledger(txt)
     # orders 在 2022-01-04 只有 rescue_partial
-    defects_orders_day = tuple(d.code.value for d in custom_ledger.for_day(DAY, "orders"))
+    defects_orders_day = tuple(d.code for d in custom_ledger.for_day(DAY, "orders"))
     assert defects_orders_day == ("rescue_partial",)
 
     # trades 在 2022-01-04 只有 seq_empty
-    defects_trades_day = tuple(d.code.value for d in custom_ledger.for_day(DAY, "trades"))
+    defects_trades_day = tuple(d.code for d in custom_ledger.for_day(DAY, "trades"))
     assert defects_trades_day == ("seq_empty",)
 
     # orders 在 2024-02-06 只有 time_6digit
-    defects_orders_day6 = tuple(d.code.value for d in custom_ledger.for_day(DAY6, "orders"))
+    defects_orders_day6 = tuple(d.code for d in custom_ledger.for_day(DAY6, "orders"))
     assert defects_orders_day6 == ("time_6digit",)
 
 
