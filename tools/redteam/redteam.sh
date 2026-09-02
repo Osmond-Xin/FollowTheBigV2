@@ -20,6 +20,12 @@ MAX="${REDTEAM_MAX_BYTES:-200000}"
 ONLY="${REDTEAM_ONLY:-opencode,agy,codex}"
 OPENCODE_MODEL="${REDTEAM_OPENCODE_MODEL:-minimax-cn-coding-plan/MiniMax-M3}"
 MODE="${1:-}"; shift || true
+# 硬上限（2026-09-03 用户裁定）：同一分支的红队轮次 ≤ 5，满了一律停，去评估或找人裁定；多轮红队会飘、性价比为负。
+_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null | tr '/' '_')"
+_ROUNDS_FILE="$(git rev-parse --show-toplevel 2>/dev/null)/.redteam/rounds/${_BRANCH}"
+mkdir -p "$(dirname "$_ROUNDS_FILE")"; _ROUNDS=$(cat "$_ROUNDS_FILE" 2>/dev/null || echo 0)
+if [ "$_ROUNDS" -ge 5 ]; then echo "分支 ${_BRANCH} 的红队已跑 ${_ROUNDS} 轮，硬上限 5 轮：停，去评估或找人裁定（不要再跑）" >&2; exit 4; fi
+echo $((_ROUNDS + 1)) > "$_ROUNDS_FILE"; echo "红队第 $((_ROUNDS + 1)) / 5 轮（分支 ${_BRANCH}）"
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/redteam.XXXXXX"); trap 'rm -rf "$TMP"' EXIT
 
 FORMAT='输出要求：中文。先给一句总判。然后按【致命 / 严重 / 建议】三级列出发现，每条必须带：

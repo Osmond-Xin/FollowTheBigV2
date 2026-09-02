@@ -260,7 +260,7 @@
     </div></article>
 
     <article class="t"><div class="t-name">日界事件<span class="t-en">Day-boundary event</span></div><div class="t-body">
-      <p>事件流中标记某 (标的, 交易日) 结束的记录。不含反常统计。是因子输出该 (标的, 日) 值的<strong>触发点</strong>，也是跨日累积与衰减的<strong>时钟</strong>。</p>
+      <p>事件流中标记某 (标的, 交易日) 结束的记录。不含反常统计。是跨日累积与衰减的<strong>时钟</strong>；因子可以在它上面产出值，但它<strong>不是</strong>因子出值的唯一触发点（2026-09-03 用户裁定：因子按事件定义，不绑定交易日）。</p>
     </div></article>
 
     <article class="t"><div class="t-name">缺口<span class="t-en">Gap</span></div><div class="t-body">
@@ -282,7 +282,7 @@
     </div></article>
 
     <article class="t"><div class="t-name">因子<span class="t-en">Factor</span></div><div class="t-body">
-      <p>由事件流计算得出的、可对（标的, 交易日）给出数值的量。<strong>因子含判断</strong>——它是「庄」这个语义的载体。</p>
+      <p>由事件流计算得出的量，<strong>按事件定义、在事件上产出值，粒度由因子自身决定，不绑定交易日</strong>（2026-09-03 用户裁定；此前「可对（标的, 交易日）给出数值」的写法把因子定成了日级，与以 Level-2 逐笔数据为核心的目标矛盾）。<strong>因子含判断</strong>——它是「庄」这个语义的载体。</p>
       <p>因子以<strong>状态机</strong>形式表达：</p>
       <pre>step(状态, 事件) -&gt; (新状态, 值?)</pre>
       <p>这个形状同时解决两件事：<strong>跨日累积不需要回看原始数据</strong>（O(30T) 降回 O(T)）；且它<strong>仍是纯函数</strong>，留在 CI 硬门禁内。</p>

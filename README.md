@@ -17,21 +17,15 @@ FollowTheBig（V1）的推倒重建。研究目标不变——从 A 股 Level-2 
 
 ## 现在处于什么阶段
 
-**第一块代码已落：原始层（摄取 + 存储访问）。** 设计决策见 `design-log/2026-09-01-立项讨论.md`；深模块评审四条高优先级已采纳，中低项待裁决；
-第一轮实施的完整过程与未竟事项见 `design-log/2026-09-02-原始层第一轮实施.md`——**新 session 先读它**。
+**原始层已合入 main 并经真实数据金标准验证；工程管束前三步已落地（账本 · 入口与工具 · 架构声明），四五步暂缓。**
+**新 session 先读 `design-log/2026-09-03-交接.md`**（状态 · 规矩 · 下一步）。
 
-- 仓库：`github.com/Osmond-Xin/FollowTheBigV2`（公开）。main 受 ruleset 保护：只能经 PR 合入，须通过 `gate` 检查，禁止 force-push 与删除。
-- 分支：`raw/consolidate` = 原始层实现 + 三层测试（契约 45 / 敌对 27 / 探针 28），门禁全绿，待合并。
-- 包：`src/ftbv2/core`（纯逻辑核）/ `src/ftbv2/io`（IO 层）。import-linter 硬拒 core → io。
-- 门禁：`bash tools/gate.sh`（ruff · import-linter · 私有 import · 词汇 · pytest），CI 同一入口（`.github/workflows/gate.yml`）。
-  词汇门禁需要 `MINIMAX_API_KEY`（本机读 `~/.mmx/config.json`，CI 读仓库 secret）；判定不可用即门禁失败。
-- CRAP：`crapkit.toml`，只用 ratchet；基线已在第一批纯逻辑核代码入库后重冻。`uv run crapkit verify`。
-- 红队 / 加固 review：`/redteam` skill → `tools/redteam/redteam.sh`，opencode(MiniMax) / agy / codex 三路并行，攻击面在 `tools/redteam/lens/`。
-- 开发流程（用户裁定）：接口 owner 写接口与契约测试 → 三方红队攻接口 → 人签字 → codex 在隔离 worktree 实现 →
-  agy 只凭接口写敌对测试 → MiniMax 写探针测试 → code-review skill → 巩固 → 三方复审 → PR。
-
-**真实数据金标准已达成**（2022-01-04：V2 摄取产物与 V1 preserve 逐行一致，唯一差异是空字段 null vs ''）；停牌心跳登记为合法形状；
-八位时间 bug 已修。产物在 `/Volumes/xin/FollowTheBigV2-raw/`。下一步：摄 20 天，跑三个必测数字 + 日级参考层。
+- 仓库：`github.com/Osmond-Xin/FollowTheBigV2`（公开）。main 受 ruleset 保护：只能经 PR 合入，须过 `gate`。
+- 结构硬约束五条（每轮强制，红队重点）：深模块 · 结构化互相调用有约束 · 同一功能只有一个入口 · 单一职责 · 不重复造轮子。红队每 PR 一轮、硬上限五轮。
+- 包：`src/ftbv2/core`（纯逻辑核）/ `src/ftbv2/io`（IO 层）；模块拓扑在 `architecture.toml`，新模块先登记。
+- 门禁：`bash tools/gate.sh`（ruff · 架构 · import-linter · 私有符号 · 账本 · 入口 · 词汇 · pytest），CI 同一入口。词汇门禁需要 `MINIMAX_API_KEY`。
+- 工具只在 `tools/`（登记于 `tools/manifest.toml`）；任何入库数字带收据（`.lineage/receipts/`）。
+- 下一刀：事件注册表 + 事件提取第一片（见交接文档第三节）。
 
 ## 硬规则速查
 
