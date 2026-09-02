@@ -6,6 +6,8 @@
 - 返回行序 = 文件序；
 - 只走 pre_buffer=True 的 pyarrow 读（ParquetFile.read_row_groups / read_table），再 `pl.from_arrow`；
   禁止 pl.read_parquet(use_pyarrow=True)（实测慢 13 倍）；
+- 全天扫描是 CPU 绑定的 dtype 还原，不是 IO（2026-09-02 真实文件复测）：要还原的列先 strip 物化一次再交给 decode
+  （pre_stripped=True），present 集合先 unique 再落 Python——不做 Python 对象往返；
 - 未登记形状硬失败：账本未登记 time_6digit 的天出现六位时间 ⇒ RuntimeError 并指出天与 stream；
   非空 row group 缺 _symbol statistics 的文件不是登记的形状 ⇒ catalog 时 RuntimeError（绝不静默裁掉真实数据）；
   只对本次投影实际读到的时间列检查（列裁剪不为此破例）；全字段的形状扫描是摄取与离线校验工具的职责；
@@ -24,10 +26,10 @@ from pathlib import Path
 import polars as pl
 import pyarrow.parquet as pq
 
-from ftbv2.core.raw.decode import decode_field, in_windows, output_dtype, short_time_present
+from ftbv2.core.raw.decode import decode_field, in_windows, output_dtype, short_time_present, strip_columns
 from ftbv2.core.raw.ledger import DefectLedger
 from ftbv2.core.raw.plan import attribute_gaps
-from ftbv2.core.raw.schema import STREAMS, SYMBOL_COL, Stream, field, manifest_relpath, parquet_relpath
+from ftbv2.core.raw.schema import FIELDS, STREAMS, SYMBOL_COL, Stream, field, manifest_relpath, parquet_relpath
 from ftbv2.core.raw.types import (
     Catalog,
     Day,
@@ -79,11 +81,13 @@ class RawStore:
         time_column = field(request.stream, "time_ms").column
         frames: list[pl.DataFrame] = []
         present: dict[Day, frozenset[str]] = {}
+        to_strip = [f.column for f in FIELDS[request.stream] if strip_columns(f)]
         for fp in plan.files:
             raw = _read_row_groups(fp)
-            if time_column in raw.columns and "time_6digit" not in fp.patches and raw.select(short_time_present(time_column)).item():
+            raw = raw.with_columns([pl.col(c).str.strip_chars() for c in to_strip if c in raw.columns])   # 物化一次，见模块 docstring
+            if time_column in raw.columns and "time_6digit" not in fp.patches and raw.select(short_time_present(time_column, pre_stripped=True)).item():
                 raise RuntimeError(f"time_6digit 未登记：{fp.day:%Y-%m-%d} {request.stream} 出现六位时间")
-            present[fp.day] = frozenset(raw[SYMBOL_COL].drop_nulls().to_list())
+            present[fp.day] = frozenset(raw[SYMBOL_COL].drop_nulls().unique().to_list())
             frames.append(_decode(raw, fp, plan))
         frame = pl.concat(frames, how="vertical") if frames else _empty_frame(plan)
         gaps = attribute_gaps(request, frozenset(fp.day for fp in plan.files), present, self._ledger)
@@ -163,7 +167,7 @@ def _decode(raw: pl.DataFrame, fp: FilePlan, plan: ScanPlan) -> pl.DataFrame:
         needed.append("time_ms")
     exprs = [pl.lit(fp.day).cast(pl.Date).alias("day"), pl.col(SYMBOL_COL).alias("symbol")]
     exprs += [
-        decode_field(field(request.stream, name), allow_6digit=allow_6digit).alias(name)
+        decode_field(field(request.stream, name), allow_6digit=allow_6digit, pre_stripped=True).alias(name)
         for name in needed if name not in ("day", "symbol")
     ]
     frame = raw.with_columns(exprs)

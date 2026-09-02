@@ -128,7 +128,7 @@
           <text x="224" y="114" text-anchor="middle" fill="var(--ink)" font-size="11">原始层 2.585 TB</text>
           <text x="534" y="114" text-anchor="middle" fill="var(--muted)" font-size="10.5">空闲 1.0 TB</text>
           <text x="636" y="108" fill="var(--io)" font-size="11.5">顺序 50–89 MB/s</text>
-          <text x="636" y="122" fill="var(--alarm)" font-size="11.5">随机 234 ms/op = 4 IOPS</text>
+          <text x="636" y="122" fill="var(--alarm)" font-size="11.5">随机 234 ms/op（盘被 V1 作业抢时；空闲 9.9 ms）</text>
 
           <!-- disk 3 -->
           <text x="0" y="156" font-size="12.5" fill="var(--ink)" font-weight="500">/Volumes/xin · HFS 外置</text>
@@ -181,7 +181,7 @@
     <li><strong>文件已全局按 <span class="m">_symbol</span> 排序，且 min/max statistics 完好</strong>。单股票查一天只需碰 680 个 row group 里的 <strong>2 个</strong>（2.6 MB / 792 MB，<strong>字节 338×</strong>）。</li>
     <li><span class="m">date=YYYYMMDD.parquet</span> 是<strong>普通文件名</strong>，不是 hive 分区目录——标准分区推断认不出，只能 glob + 字符串切片。</li>
     <li><span class="m">column_4</span>（时间）是字符串，statistics 按<strong>字典序</strong>：rg0 的 min/max 是 <span class="m">('100000040','95959440')</span>，<strong>min &gt; max</strong> ⇒ <strong>时间窗谓词无法下推</strong>。</li>
-    <li><span class="m">pre_buffer=True</span>：单列全文件扫描 231.9 s → 5.3 s（<strong>43.8×</strong>）。</li>
+    <li><span class="m">pre_buffer=True</span>：单列全文件扫描 231.9 s → 5.3 s（43.8×）——<strong>这是盘被 V1 作业抢时测的</strong>。2026-09-02 作业停后无争用复测：<span class="m">pre_buffer=False</span> 冷读同样只要 3.3 s，收益只在争用时出现；仍保持 <span class="m">pre_buffer=True</span>（无争用不亏）。单股 row group 裁剪复测 <strong>68.7×</strong>（0.09 s vs 全天 7 列 6.0 s）。全天单字段读 13.6 s 里 IO 只占一半，其余是 dtype 还原的 CPU——已改为 strip 物化一次、去正则、present 集合先 unique。</li>
     <li><span class="m">pl.read_parquet(use_pyarrow=True)</span> 实测 <strong>350 s</strong>，比现状慢 13 倍。<span class="m">pq.read_table</span> 9.4 s，跑满盘带宽。</li>
   </ul>
 
@@ -308,6 +308,12 @@
         <td>20260805（差 1：orders 3138 / trades 3139）· 20260811（差 3：3180 / 3177）。这两天也是 manifest 里缺的那两天</td>
       </tr>
       <tr>
+        <td><strong>停牌心跳</strong><br><span class="note">合法形状，不是缺陷；2026-09-02 实测裁定</span></td>
+        <td>标的目录<strong>只有行情 CSV</strong>（每分钟一条、价格与十档全 0），无委托无成交 ⇒ 三 stream 标的数天然不等（V1 manifest：xinqing 3134 / orders 3128）。摄取放行并记入收据 <span class="m">quote_only_symbols</span>；只缺委托、成交之一，或缺行情，仍是残缺归档硬失败。「停牌」由日级参考层判定，摄取不猜</td>
+        <td class="c">标的目录里的 CSV 文件集合</td>
+        <td>20220104：000780 / 002323 / 002722 / 600072 / 603227 / 605090（主板 6，含非主板共 13）· 20220105：12。每天都有</td>
+      </tr>
+      <tr>
         <td><strong>NUL 哨兵</strong></td>
         <td><span class="m">.is_null()</span> 与 <span class="m">== ""</span> 判不出</td>
         <td class="c">repr 比对</td>
@@ -379,7 +385,7 @@
       <tr><td class="c">open · high · low · close</td><td>trades <span class="m">TRADE_PRICE</span>（元 × 10000 定点），含集合竞价的口径待定</td><td>可派生；口径待定</td></tr>
       <tr><td class="c">volume · amount</td><td>trades <span class="m">TRADE_VOL</span> × <span class="m">TRADE_PRICE</span>，只计 <span class="m">TRADE_CODE=='0'</span></td><td>可派生</td></tr>
       <tr><td class="c">limit_state</td><td>涨跌停价<strong>不在已登记列内</strong>（xinqing <span class="m">column_5–17</span> 有 25 列从未被读、未登记）；V1 用 <span class="m">FTB_KEEP_LOCKED</span> 判定的规则须从代码取回</td><td class="hit">来源列待登记；规则待定</td></tr>
-      <tr><td class="c">suspended</td><td>该日三 stream 均无该标的记录 ⇒ 停牌候选；须与缺口（缺陷账本）区分</td><td class="hit">判定规则待定</td></tr>
+      <tr><td class="c">suspended</td><td>该日行情只有心跳快照（价格与十档全 0）且委托、成交无该标的 ⇒ 停牌候选；直接来源是摄取收据 <span class="m">quote_only_symbols</span>（2026-09-02 实测：停牌股在 xinqing <strong>有</strong>心跳行，「三 stream 均无记录」的旧假设不成立）；须与缺口（缺陷账本）区分</td><td class="hit">来源已定，判定规则待写进代码</td></tr>
       <tr><td class="c">universe · st · listed_days</td><td>主板前缀（<span class="m">000/001/002/003/600/601/603/605</span>）可派生；ST 与上市日在 Level-2 三流里<strong>没有</strong>，需外部 PIT 来源</td><td class="hit">ST / 上市日无数据来源</td></tr>
     </tbody>
   </table></div>

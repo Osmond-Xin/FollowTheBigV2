@@ -59,8 +59,9 @@ def ingest(
 ) -> IngestReceipt:
     """archive 内布局 {YYYYMMDD}/{symbol}/{行情,逐笔委托,逐笔成交}.csv（也接受无日期前缀的扁平布局）。
     CSV：GBK 表头一行 + 纯 ASCII 数据行，所有字段按字符串原样保留（含 '\\x00'）。
-    只有表头、零数据行的 CSV 是合法的（全天无委托 / 无成交），照常计数为 0；标的目录里**缺少**某个 stream 的 CSV 文件
-    则是残缺归档 ⇒ RuntimeError。
+    只有表头、零数据行的 CSV 是合法的（全天无委托 / 无成交），照常计数为 0。
+    标的目录**只有行情 CSV、同时没有委托与成交** = 停牌心跳（数据表第四节，2026-09-02 实测裁定）：合法形状，该标的只进 xinqing，
+    记入 receipt.quote_only_symbols，三 stream 的 n_symbols 因此可以不等；只缺委托、成交之一，或缺行情，仍是残缺归档 ⇒ RuntimeError。
     已完成（manifest 三 stream 齐全且 archive_sha256、prefixes 相同）的天直接返回既有 receipt，不重做。
     scratch_parent：临时解包目录的父目录（默认系统临时目录）；实际解包目录用 mkdtemp 私有创建。"""
     archive = archive.resolve(strict=True)
@@ -92,7 +93,7 @@ def ingest(
     try:
         _extract(archive, scratch)
         _validate_extracted(scratch)
-        csvs, dropped = _discover_csvs(scratch, day, tuple(prefixes))
+        csvs, dropped, quote_only = _discover_csvs(scratch, day, tuple(prefixes))
         receipts: list[StreamReceipt] = []
         for stream in STREAMS:                      # 逐流：加载 → 写盘 → 释放，峰值内存只有一个 stream
             frame, receipt = _load_stream(stream, csvs[stream])
@@ -103,7 +104,7 @@ def ingest(
                 receipt.stream, receipt.n_symbols, receipt.n_rows_csv, receipt.n_rows_parquet, receipt.header,
                 target.stat().st_size, _sha256_file(target), receipt.sha256_csv,
             ))
-        receipt = IngestReceipt(day, archive, archive_sha, tuple(prefixes), _sevenzip_version(), tuple(receipts), dropped)
+        receipt = IngestReceipt(day, archive, archive_sha, tuple(prefixes), _sevenzip_version(), tuple(receipts), dropped, quote_only)
         _write_manifest(manifest, receipt)
         return receipt
     finally:
@@ -121,6 +122,7 @@ def _load_manifest(path: Path) -> IngestReceipt | None:
     return IngestReceipt(
         dt.date.fromisoformat(data["day"]), Path(data["archive"]), data["archive_sha256"], tuple(data["prefixes"]),
         data["sevenzip_version"], tuple(StreamReceipt(**row) for row in data["streams"]), dict(data["dropped_by_prefix"]),
+        tuple(data["quote_only_symbols"]),
     )
 
 
@@ -130,7 +132,7 @@ def _write_manifest(path: Path, receipt: IngestReceipt) -> None:
         "quality": Quality.SELF_CONSISTENT.value, "day": f"{receipt.day:%Y-%m-%d}", "archive": str(receipt.archive),
         "archive_sha256": receipt.archive_sha256, "prefixes": list(receipt.prefixes),
         "sevenzip_version": receipt.sevenzip_version, "streams": [asdict(s) for s in receipt.streams],
-        "dropped_by_prefix": receipt.dropped_by_prefix,
+        "dropped_by_prefix": receipt.dropped_by_prefix, "quote_only_symbols": list(receipt.quote_only_symbols),
     }
     _atomic_write(path, lambda tmp: tmp.write_text(json.dumps(data, ensure_ascii=False, sort_keys=True), encoding="utf-8"))
 
@@ -219,7 +221,10 @@ def _validate_extracted(scratch: Path) -> None:
 # ----------------------------------------------------------------- 发现与读取 CSV
 
 
-def _discover_csvs(scratch: Path, day: Day, prefixes: tuple[str, ...]) -> tuple[dict[Stream, list[tuple[str, Path]]], dict[str, int]]:
+def _discover_csvs(
+    scratch: Path, day: Day, prefixes: tuple[str, ...],
+) -> tuple[dict[Stream, list[tuple[str, Path]]], dict[str, int], tuple[str, ...]]:
+    """返回 (按 stream 的 (标的, 路径) 列表, 按前缀计数的丢弃, 只有行情的标的)。"""
     day_text = f"{day:%Y%m%d}"
     by_symbol: dict[str, dict[Stream, Path]] = {}
     dropped: dict[str, int] = {}
@@ -244,16 +249,19 @@ def _discover_csvs(scratch: Path, day: Day, prefixes: tuple[str, ...]) -> tuple[
             continue
         by_symbol.setdefault(symbol, {})[stream] = path
     by_stream: dict[Stream, list[tuple[str, Path]]] = {stream: [] for stream in STREAMS}
+    quote_only: list[str] = []
     for symbol in sorted(by_symbol):
         streams = by_symbol[symbol]
-        if set(streams) != set(STREAMS):
+        if set(streams) == {"xinqing"}:                # 停牌心跳：只有行情，合法形状，登记而不是静默
+            quote_only.append(symbol)
+        elif set(streams) != set(STREAMS):
             raise RuntimeError(f"标的 {symbol} 缺 stream CSV：{sorted(set(STREAMS) - set(streams))}")
         for stream, path in streams.items():
             by_stream[stream].append((symbol, path))
     for stream, rows in by_stream.items():
         if not rows:
             raise RuntimeError(f"归档里没有任何 {stream} 的 CSV")
-    return by_stream, dropped
+    return by_stream, dropped, tuple(quote_only)
 
 
 def _load_stream(stream: Stream, csvs: list[tuple[str, Path]]) -> tuple[pl.DataFrame, StreamReceipt]:
