@@ -9,7 +9,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from ftbv2.io.raw.ingest import ingest_days
-from ftbv2.io.receipt import sha256_file, write_receipt
+from ftbv2.io.receipt import write_receipt
 
 
 def main() -> int:
@@ -29,8 +29,8 @@ def main() -> int:
                                                             "empty_files": [list(p) for p in o.receipt.empty_files]}}
                 for o in result.outcomes]
     receipt_id, _ = write_receipt(
-        "ingest_days", Path(__file__),
-        {o.archive.name: sha256_file(o.archive) for o in result.outcomes if o.status == "ok"},
+        "ingest_days", Path(__file__), vars(args),
+        {o.archive.name: o.receipt.archive_sha256 for o in result.outcomes if o.receipt},
         {o.day.isoformat(): ",".join(s.parquet_sha256 for s in o.receipt.streams) for o in result.outcomes if o.receipt},
         {"ok": result.ok, "n_ok": sum(o.status == "ok" for o in result.outcomes), "skipped": [str(p) for p, _ in result.skipped]},
     )

@@ -51,6 +51,7 @@ from ftbv2.core.raw.types import Day, IngestReceipt, Quality, StreamReceipt
 _STREAM_OF_CSV = {name: stream for stream, name in CSV_NAME.items()}
 _ARCHIVE_SYMBOL_RE = re.compile(r"^\d{6}\.[A-Z]{2,3}$")   # 归档里可能有 .BJ / 基金等，形状合法即可；宇宙由前缀决定
 _LIST_TIMEOUT_S = 600
+EMPTY_FILE_STREAMS: tuple[Stream, ...] = ("xinqing",)   # 账本 D009 登记过 0 字节形状的 stream；其他流出现 0 字节 = 未登记形状，硬失败
 _EXTRACT_TIMEOUT_S = 4 * 3600
 
 
@@ -151,8 +152,11 @@ def ingest_days(archives: Sequence[Path], root: Path, *, scratch_parent: Path, m
     - 单天失败：stop_on_error 时停止（默认），否则记 failed 继续；幂等由 ingest() 保证。"""
     skipped: list[tuple[Path, str]] = []
     outcomes: list[DayOutcome] = []
-    for archive in archives:
-        day = archive_day(archive.name)
+    days = [archive_day(a.name) for a in archives]
+    dup = sorted({d for d in days if d is not None and days.count(d) > 1})
+    if dup:
+        raise ValueError(f"同一交易日出现多个归档：{[f'{d:%Y%m%d}' for d in dup]}（先决定用哪一个，不静默覆盖）")
+    for archive, day in zip(archives, days, strict=True):
         if day is None:
             skipped.append((archive, "非规范文件名（重复件 / 半成品 / 非 YYYYMMDD.7z）"))
             continue
@@ -172,7 +176,8 @@ def ingest_days(archives: Sequence[Path], root: Path, *, scratch_parent: Path, m
 
 
 def _low_disk(path: Path, min_free_bytes: int, min_free_pct: float) -> str:
-    path.mkdir(parents=True, exist_ok=True)
+    if not path.is_dir():
+        return f"{path} 不存在或不是目录（磁盘检查不替调用方创建目录：路径错了要报错，不能伪装成可用）"
     usage = shutil.disk_usage(path)
     pct = usage.free / usage.total * 100
     if usage.free < min_free_bytes or pct < min_free_pct:
@@ -344,11 +349,13 @@ def _load_stream(stream: Stream, csvs: list[tuple[str, Path]]) -> tuple[pl.DataF
     for symbol, path in csvs:                      # 已按标的升序
         data = path.read_bytes()                   # 只读一次盘：表头、计数、哈希、解析都从这份字节来
         if not data:
+            if stream not in EMPTY_FILE_STREAMS:
+                raise RuntimeError(f"0 字节 CSV 出现在未登记的 stream {stream}：{path}（账本只登记了 {EMPTY_FILE_STREAMS}）")
             empty.append(symbol)
             continue
         n_symbols += 1
         newline = data.find(b"\n")
-        if newline < 0 and not data.strip():
+        if not data.strip() or (newline >= 0 and not data[:newline].strip()):
             raise RuntimeError(f"CSV 没有表头：{path}")
         header_bytes = (data if newline < 0 else data[:newline]).rstrip(b"\r")
         body = b"" if newline < 0 else data[newline + 1:]

@@ -24,10 +24,12 @@ def main() -> int:
         args.out.write_text("day\tstream\tlen\tcount\n", encoding="utf-8")
     days = tuple(args.days) if args.days else preserve_days(args.root)
     with args.out.open("a", encoding="utf-8") as f:
-        for obs in scan_time_shapes(args.root, [d for d in days if not any((f"{d:%Y%m%d}", s) in done for s in ("orders", "trades", "xinqing"))]):
-            for length, count in sorted(obs.lengths.items()):
-                f.write(f"{obs.day:%Y%m%d}\t{obs.stream}\t{length}\t{count}\n")
-    receipt_id, _ = write_receipt("scan_shapes", Path(__file__), {"root": str(args.root), "days": f"{days[0]}..{days[-1]}" if days else ""},
+        for d in days:
+            todo = [s for s in ("orders", "trades", "xinqing") if (f"{d:%Y%m%d}", s) not in done]   # 续跑按 (day, stream)
+            for obs in scan_time_shapes(args.root, [d], todo):
+                for length, count in sorted(obs.lengths.items()):
+                    f.write(f"{obs.day:%Y%m%d}\t{obs.stream}\t{length}\t{count}\n")
+    receipt_id, _ = write_receipt("scan_shapes", Path(__file__), vars(args), {"root": str(args.root), "days": f"{days[0]}..{days[-1]}" if days else ""},
                                   {str(args.out): sha256_file(args.out)}, {"n_days": len(days)})
     print(f"receipt {receipt_id} → {args.out}")
     return 0

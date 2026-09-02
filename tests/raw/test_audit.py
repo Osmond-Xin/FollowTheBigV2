@@ -59,6 +59,7 @@ def test_read_floor_times_every_stream(tmp_path, ledger):
 
 def test_ingest_days_registers_noncanonical_and_disk_floor(tmp_path):
     root, scratch = tmp_path / "root", tmp_path / "scratch"
+    root.mkdir(); scratch.mkdir()
     dup = tmp_path / "20220104(1).7z"; dup.write_bytes(b"x")
     result = ingest_days([dup], root, scratch_parent=scratch, min_free_bytes=0, min_free_pct=0.0)
     assert result.skipped == ((dup, "非规范文件名（重复件 / 半成品 / 非 YYYYMMDD.7z）"),) and not result.ok and result.outcomes == ()
@@ -69,11 +70,17 @@ def test_ingest_days_registers_noncanonical_and_disk_floor(tmp_path):
     result = ingest_days([good], root, scratch_parent=scratch, min_free_bytes=0, min_free_pct=0.0)
     (o,) = result.outcomes
     assert o.status == "failed" and o.error and not result.ok       # 假归档 ⇒ 7zz 失败被记录，不吞
+    missing = ingest_days([good], root, scratch_parent=tmp_path / "nope", min_free_bytes=0, min_free_pct=0.0)
+    assert missing.outcomes[0].status == "stopped_disk" and "不存在" in missing.outcomes[0].error   # 磁盘检查不替调用方建目录
+    twice = tmp_path / "other" / "20220104.7z"; twice.parent.mkdir(); twice.write_bytes(b"x")
+    with pytest.raises(ValueError, match="同一交易日出现多个归档"):
+        ingest_days([good, twice], root, scratch_parent=scratch, min_free_bytes=0, min_free_pct=0.0)
 
 
 @pytest.mark.parametrize("stop", [True, False])
 def test_ingest_days_stop_policy(tmp_path, stop):
     a, b = tmp_path / "20220104.7z", tmp_path / "20220105.7z"
     a.write_bytes(b"x"); b.write_bytes(b"x")
+    (tmp_path / "root").mkdir(); (tmp_path / "s").mkdir()
     result = ingest_days([a, b], tmp_path / "root", scratch_parent=tmp_path / "s", min_free_bytes=0, min_free_pct=0.0, stop_on_error=stop)
     assert len(result.outcomes) == (1 if stop else 2)

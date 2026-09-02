@@ -1,0 +1,38 @@
+{
+ "ran_at": "2026-09-02T22:01:42.898256+00:00",
+ "mode": "design",
+ "head": "ec366bbec8cf89f49175474c8d72d9f91e3afa1a",
+ "object_sha256": "df05bad1796dcc1fac1f0e002d083459d9bb3d4c3e55799a71fabd711348fce4",
+ "context_sha256": "c77a70a9deeda28264118daf900f02721354da5b227e50d313571ec1601b2017",
+ "lens_sha256": {
+  "工程.md": "5069df87fa270f07994eee71036e53ed3beb7c7a8f9faff05d02119829256200",
+  "方法论.md": "21ce0fa27ca1fb657431f3247c9b1e933555179cf4485ecf1fb74d5f57bbc6b3",
+  "架构.md": "5e12efa556ce78607593104570f0eb00658ca5c77e41fd61835de64321fadef4"
+ },
+ "runners": [
+  {
+   "name": "opencode",
+   "version": "/Users/osmond/.opencode/bin/opencode 1.18.26",
+   "exit": 0,
+   "verdict": "裁决：不得合并",
+   "output": "/Users/osmond/Documents/project/FollowTheBigV2/docs/design-log/2026-09-02-红队-工程管束第二步-方法论.md",
+   "output_sha256": "dbc2acd5d26a27e03dc8007a8937db5787dec391db3e788af9c837ddb5b9b259"
+  },
+  {
+   "name": "agy",
+   "version": "/Users/osmond/.local/bin/agy 1.1.24",
+   "exit": 0,
+   "verdict": "裁决：不得合并",
+   "output": "/Users/osmond/Documents/project/FollowTheBigV2/docs/design-log/2026-09-02-红队-工程管束第二步-架构.md",
+   "output_sha256": "9040d358a703dc8baf228fa4fc17d211facb4a77c86fbcbf0f274f7dcca02d4e"
+  },
+  {
+   "name": "codex",
+   "version": "/Users/osmond/.local/bin/codex codex-cli 0.146.0",
+   "exit": 0,
+   "verdict": "裁决：不得合并",
+   "output": "/Users/osmond/Documents/project/FollowTheBigV2/docs/design-log/2026-09-02-红队-工程管束第二步-工程.md",
+   "output_sha256": "994dc4c27bb0d6877e187628eeed2a60bb486fbaa7ee44012a019601f074e123"
+  }
+ ]
+}

@@ -9,8 +9,9 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
+from ftbv2.core.raw.schema import STREAMS, parquet_relpath
 from ftbv2.io.raw.audit import compare_preserve, preserve_days, symbol_mismatches
-from ftbv2.io.receipt import write_receipt
+from ftbv2.io.receipt import sha256_files, write_receipt
 
 
 def main() -> int:
@@ -23,17 +24,19 @@ def main() -> int:
     args = ap.parse_args()
     if args.cmd == "compare":
         result = compare_preserve(args.a, args.b, args.day)
-        payload = {"day": args.day.isoformat(), "identical_modulo_null": all(r.identical_modulo_null for r in result),
-                   "streams": [asdict(r) for r in result]}
-        inputs = {"a": str(args.a), "b": str(args.b)}
+        ok = all(r.identical_modulo_null for r in result)
+        payload = {"day": args.day.isoformat(), "identical_modulo_null": ok, "streams": [asdict(r) for r in result]}
+        files = [args.a / parquet_relpath(s, args.day) for s in STREAMS] + [args.b / parquet_relpath(s, args.day) for s in STREAMS]
+        inputs = {"a_files": sha256_files(files[:3]), "b_files": sha256_files(files[3:])}
     else:
         days = tuple(args.days) if args.days else preserve_days(args.root)
         result = symbol_mismatches(args.root, days)
+        ok = True
         payload = {"n_days": len(days), "mismatches": [{"day": r.day.isoformat(), "only_in": r.only_in} for r in result]}
-        inputs = {"root": str(args.root), "days": f"{days[0]}..{days[-1]}" if days else ""}
-    receipt_id, _ = write_receipt(f"audit_preserve.{args.cmd}", Path(__file__), inputs, {}, payload)
+        inputs = {"symbol_columns": sha256_files([args.root / parquet_relpath(s, d) for d in days for s in STREAMS])}
+    receipt_id, _ = write_receipt(f"audit_preserve.{args.cmd}", Path(__file__), vars(args), inputs, {}, payload)
     print(json.dumps({"receipt_id": receipt_id, **payload}, ensure_ascii=False, indent=1))
-    return 0
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

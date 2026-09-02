@@ -27,10 +27,12 @@ class StreamCompare:
     row_groups: tuple[int, int]
     schema_equal: bool
     null_columns_a: dict[str, int] = field(default_factory=dict)   # A 里为 null 的格数（按列）
-    cells_differ: dict[str, int] = field(default_factory=dict)      # 把 A 的 null 视作 '' 后仍不同的格数（按列）
+    null_columns_b: dict[str, int] = field(default_factory=dict)   # B 里为 null 的格数（按列）
+    cells_differ: dict[str, int] = field(default_factory=dict)      # 两侧都把 null 视作 '' 后仍不同的格数（按列）；行数 / schema 不等时不比
 
     @property
     def identical_modulo_null(self) -> bool:
+        """行数、row group 数（preserve 布局是接口不变量）、schema 全等且逐格无差异。null ≡ '' 只是等价类，两侧都规约。"""
         return self.rows[0] == self.rows[1] and self.row_groups[0] == self.row_groups[1] and self.schema_equal and not self.cells_differ
 
 
@@ -43,7 +45,8 @@ def compare_preserve(root_a: Path, root_b: Path, day: Day, streams: Iterable[Str
         ma, mb = fa.metadata, fb.metadata
         names = fb.schema_arrow.names
         schema_equal = fa.schema_arrow.equals(fb.schema_arrow)
-        nulls: dict[str, int] = {}
+        nulls_a: dict[str, int] = {}
+        nulls_b: dict[str, int] = {}
         differ: dict[str, int] = {}
         if ma.num_rows == mb.num_rows and ma.num_row_groups == mb.num_row_groups and schema_equal:
             for i in range(ma.num_row_groups):
@@ -51,11 +54,14 @@ def compare_preserve(root_a: Path, root_b: Path, day: Day, streams: Iterable[Str
                 b = fb.read_row_group(i, columns=names)
                 for c in names:
                     if a[c].null_count:
-                        nulls[c] = nulls.get(c, 0) + a[c].null_count
-                    ne = pc.fill_null(pc.invert(pc.equal(pc.fill_null(a[c], ""), b[c])), True)
+                        nulls_a[c] = nulls_a.get(c, 0) + a[c].null_count
+                    if b[c].null_count:
+                        nulls_b[c] = nulls_b.get(c, 0) + b[c].null_count
+                    ne = pc.invert(pc.equal(pc.fill_null(a[c], ""), pc.fill_null(b[c], "")))   # 两侧都规约，双 null 相等
                     if k := (pc.sum(ne).as_py() or 0):
                         differ[c] = differ.get(c, 0) + k
-        out.append(StreamCompare(stream, (ma.num_rows, mb.num_rows), (ma.num_row_groups, mb.num_row_groups), schema_equal, nulls, differ))
+        out.append(StreamCompare(stream, (ma.num_rows, mb.num_rows), (ma.num_row_groups, mb.num_row_groups), schema_equal,
+                                 nulls_a, nulls_b, differ))
     return tuple(out)
 
 

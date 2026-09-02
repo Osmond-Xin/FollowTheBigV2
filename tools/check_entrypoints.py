@@ -19,6 +19,8 @@ SKIP_DIRS = {".venv", ".git", ".redteam", ".crapkit", "__pycache__", ".pytest_ca
 FORBIDDEN_DIRS = {"scripts", "bin", "notebooks"}
 CLI_MODULES = {"argparse", "click", "typer"}
 ADAPTER_MAX_LINES = 120
+EXEC_FUNCS = {"subprocess.run", "subprocess.Popen", "subprocess.call", "subprocess.check_output", "subprocess.check_call",
+              "os.system", "os.popen", "runpy.run_module", "runpy.run_path", "exec", "eval"}
 
 
 def _iter_files(root: Path):
@@ -27,6 +29,16 @@ def _iter_files(root: Path):
             continue
         if p.is_file():
             yield p
+
+
+def _dynamic_import_targets(node: ast.AST) -> set[str]:
+    """`__import__("x")` / `importlib.import_module("x")` 的字符串参数。"""
+    if not isinstance(node, ast.Call):
+        return set()
+    name = node.func.id if isinstance(node.func, ast.Name) else (node.func.attr if isinstance(node.func, ast.Attribute) else "")
+    if name not in ("__import__", "import_module"):
+        return set()
+    return {a.value.split(".")[0] for a in node.args if isinstance(a, ast.Constant) and isinstance(a.value, str)}
 
 
 def _is_py_entry(text: str) -> bool:
@@ -40,6 +52,24 @@ def _is_py_entry(text: str) -> bool:
         if isinstance(node, ast.Import) and any(a.name.split(".")[0] in CLI_MODULES for a in node.names):
             return True
         if isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] in CLI_MODULES:
+            return True
+        if _dynamic_import_targets(node) & CLI_MODULES:
+            return True
+    return False
+
+
+def gate_touches_src(text: str) -> bool:
+    """gate 必须自包含：静态 import、动态 import、以及 subprocess / runpy / os.system 里出现 ftbv2 都算碰了被审代码。"""
+    if re.search(r"^\s*(from|import)\s+ftbv2", text, re.M):
+        return True
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return True
+    for node in ast.walk(tree):
+        if "ftbv2" in _dynamic_import_targets(node):
+            return True
+        if isinstance(node, ast.Call) and ast.unparse(node.func) in EXEC_FUNCS and "ftbv2" in ast.unparse(node.args):
             return True
     return False
 
@@ -64,12 +94,32 @@ def forbidden_dirs(root: Path) -> list[str]:
                   if p.is_dir() and p.name in FORBIDDEN_DIRS and not any(part in SKIP_DIRS for part in p.parts))
 
 
+RUN_RE = re.compile(r"(?:python3?|uv run python|bash|sh)\s+(?:-m\s+([\w.]+)|([\w./-]+\.(?:py|sh)))")
+
+
 def workflow_refs(root: Path) -> set[str]:
+    """workflow（.yml / .yaml）`run:` 里执行的仓库文件或 `python -m 模块`；含 `${{ }}` 插值的行整行登记为动态入口，必须在 manifest 显式允许。"""
     refs: set[str] = set()
-    for wf in (root / ".github" / "workflows").glob("*.yml"):
-        for m in re.finditer(r"(tools/[\w./-]+\.(?:py|sh))", wf.read_text(encoding="utf-8")):
-            refs.add(m.group(1))
+    wf_dir = root / ".github" / "workflows"
+    for wf in list(wf_dir.glob("*.yml")) + list(wf_dir.glob("*.yaml")):
+        for line in wf.read_text(encoding="utf-8").splitlines():
+            if "${{" in line and RUN_RE.search(line):
+                refs.add(f"dynamic:{line.strip()}")
+                continue
+            for module, path in RUN_RE.findall(line):
+                if module:
+                    refs.add(f"module:{module}")
+                elif path and not path.startswith("/") and not path.startswith("$"):
+                    refs.add(path)
     return refs
+
+
+def project_scripts(root: Path) -> set[str]:
+    pyproject = root / "pyproject.toml"
+    if not pyproject.is_file():
+        return set()
+    scripts = tomllib.loads(pyproject.read_text(encoding="utf-8")).get("project", {}).get("scripts", {})
+    return {f"script:{name}={target}" for name, target in scripts.items()}
 
 
 def check_manifest(root: Path, entries: set[str]) -> list[str]:
@@ -82,6 +132,8 @@ def check_manifest(root: Path, entries: set[str]) -> list[str]:
             continue
         path, kind = str(t["path"]), str(t["kind"])
         registered.add(path)
+        if path.startswith(("module:", "dynamic:", "script:")):
+            continue                                   # 显式允许的非文件入口（模块、动态 run 行、console script）
         f = root / path
         if not path.startswith("tools/") or not f.is_file():
             problems.append(f"{path}：入口只能在 tools/ 下且文件必须存在")
@@ -91,11 +143,12 @@ def check_manifest(root: Path, entries: set[str]) -> list[str]:
         text = f.read_text(encoding="utf-8", errors="replace")
         if kind == "adapter" and len(text.splitlines()) > ADAPTER_MAX_LINES:
             problems.append(f"{path}：adapter 不得超过 {ADAPTER_MAX_LINES} 行（现 {len(text.splitlines())}），判据下沉 src")
-        if kind == "gate" and re.search(r"^\s*from ftbv2|^\s*import ftbv2", text, re.M):
-            problems.append(f"{path}：gate 必须自包含，不得 import ftbv2（被审 PR 不能给自己当裁判）")
+        if kind == "gate" and path.endswith(".py") and gate_touches_src(text):
+            problems.append(f"{path}：gate 必须自包含，不得以任何方式（import / importlib / subprocess）碰 ftbv2（被审 PR 不能给自己当裁判）")
         smoke = root / str(t["smoke_test"])
-        if not smoke.is_file() or Path(path).name not in smoke.read_text(encoding="utf-8", errors="replace"):
-            problems.append(f"{path}：smoke_test {t['smoke_test']} 不存在或未引用该工具")
+        smoke_text = smoke.read_text(encoding="utf-8", errors="replace") if smoke.is_file() else ""
+        if Path(path).name not in smoke_text or not re.search(r"subprocess\.run|import tools\.|from tools\.|from tools", smoke_text):
+            problems.append(f"{path}：smoke_test {t['smoke_test']} 不存在、未引用该工具、或没有真正调用（subprocess / import）")
     problems += [f"{e}：可执行入口未登记在 tools/manifest.toml（或不在 tools/ 下）" for e in sorted(entries - registered)]
     problems += [f"{r}：manifest 登记了但仓库里不是入口" for r in sorted(registered - entries)]
     return problems
@@ -103,7 +156,7 @@ def check_manifest(root: Path, entries: set[str]) -> list[str]:
 
 def check(root: Path) -> list[str]:
     problems = [f"{d}：禁止的目录名（scripts / bin / notebooks）" for d in forbidden_dirs(root)]
-    entries = find_entries(root) | workflow_refs(root)
+    entries = find_entries(root) | workflow_refs(root) | project_scripts(root)
     return problems + check_manifest(root, entries)
 
 

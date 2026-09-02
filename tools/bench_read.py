@@ -28,7 +28,7 @@ def main() -> int:
     per_stream = {s: sum(t.seconds for t in timings if t.stream == s) / max(len(days), 1) for s in ("orders", "trades", "xinqing")}
     payload = {"n_days": len(days), "seconds_per_day": per_stream,
                "extrapolated_hours": round(sum(per_stream.values()) * args.extrapolate_days / 3600, 1), "timings": [asdict(t) for t in timings]}
-    receipt_id, _ = write_receipt("bench_read", Path(__file__), {"root": str(args.root), "ledger": ledger.sha256}, {}, payload)
+    receipt_id, _ = write_receipt("bench_read", Path(__file__), vars(args), {"root": str(args.root), "ledger": ledger.sha256}, {}, payload)
     print(json.dumps({"receipt_id": receipt_id, **payload}, ensure_ascii=False, indent=1, default=str))
     return 0
 

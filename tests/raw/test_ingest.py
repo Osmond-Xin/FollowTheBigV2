@@ -252,9 +252,17 @@ def test_ingest_zero_byte_csv_is_recorded_not_silent(tmp_path, root, ledger):
 
 
 def test_ingest_whole_stream_empty_still_fails(tmp_path, root, ledger):
-    """所有标的的某一流都是 0 字节 ⇒ 整流无数据，硬失败（不是「合法空天」）。"""
-    archive = make_archive(tmp_path, {"600000.SH": 3, "000001.SZ": 2}, empty={"600000.SH": ("trades",), "000001.SZ": ("trades",)})
+    """所有标的的 xinqing 都是 0 字节 ⇒ 整流无数据，硬失败（不是「合法空天」）。"""
+    archive = make_archive(tmp_path, {"600000.SH": 3, "000001.SZ": 2}, empty={"600000.SH": ("xinqing",), "000001.SZ": ("xinqing",)})
     with pytest.raises(RuntimeError, match="整流无数据"):
+        ingest(DAY, archive, root)
+    assert not (root / "manifest" / f"{DAY:%Y%m%d}.json").exists()
+
+
+def test_ingest_zero_byte_in_unregistered_stream_fails(tmp_path, root, ledger):
+    """账本 D009 只登记了 xinqing 的 0 字节形状：orders / trades 出现 0 字节 = 未登记形状 ⇒ 硬失败（不变成隐式样本裁剪）。"""
+    archive = make_archive(tmp_path, {"600000.SH": 3, "000001.SZ": 2}, empty={"000001.SZ": ("orders",)})
+    with pytest.raises(RuntimeError, match="未登记的 stream orders"):
         ingest(DAY, archive, root)
     assert not (root / "manifest" / f"{DAY:%Y%m%d}.json").exists()
 
@@ -264,6 +272,10 @@ def test_ingest_bytes_without_header_still_fails(tmp_path, root, ledger):
     archive = make_archive(tmp_path, {"600000.SH": 3})
     src = tmp_path / "src" / f"{DAY:%Y%m%d}" / "600000.SH"
     (src / CSV_NAME["orders"]).write_bytes(b"   ")
+    subprocess.run(["7zz", "a", "-bso0", "-bsp0", "-y", str(archive), f"{DAY:%Y%m%d}"], cwd=src.parent.parent, check=True)
+    with pytest.raises(RuntimeError, match="没有表头"):
+        ingest(DAY, archive, root)
+    (src / CSV_NAME["orders"]).write_bytes(b"\r\n")                 # 只含换行：也是无表头，不能让后面的文件被误判「表头不一致」
     subprocess.run(["7zz", "a", "-bso0", "-bsp0", "-y", str(archive), f"{DAY:%Y%m%d}"], cwd=src.parent.parent, check=True)
     with pytest.raises(RuntimeError, match="没有表头"):
         ingest(DAY, archive, root)
