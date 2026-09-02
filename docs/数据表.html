@@ -211,7 +211,7 @@
       <tr><td class="c">column_1</td><td>万得代码</td><td class="c">—</td><td><span class="m">002783.SZ</span> · <strong class="hit">前导零是代码的一部分，永不转数值</strong></td></tr>
       <tr class="dim"><td class="c">column_2</td><td>交易所代码</td><td class="c">—</td><td><span class="m">002783</span> · 从未被读</td></tr>
       <tr class="dim"><td class="c">column_3</td><td>自然日</td><td class="c">—</td><td><span class="m">20260803</span> · 从未被读</td></tr>
-      <tr><td class="c">column_4</td><td>时间</td><td class="c key">ORDER_TIME</td><td><span class="m">HHMMSSmmm</span> 九位无时区（交易所本地时 UTC+8），毫秒精度。<strong class="hit">某些天是 6 位 HHMMSS</strong>，见缺陷账本</td></tr>
+      <tr><td class="c">column_4</td><td>时间</td><td class="c key">ORDER_TIME</td><td><span class="m">HHMMSSmmm</span> 无时区（交易所本地时 UTC+8），毫秒精度；<strong>10 点前小时不足两位时省前导零成八位 <span class="m">HMMSSmmm</span></strong>（如 <span class="m">93000123</span>；每天约 28% 的行，2022-01-27 三条流实测），读取层按数值拆位、八位九位同一公式。<strong class="hit">某些天是 6 位 HHMMSS / 5 位 HMMSS</strong>，见缺陷账本</td></tr>
       <tr><td class="c">column_5</td><td>委托编号</td><td class="c hit">未登记</td><td class="hit">schema 不稳定：20240102 占 18.5% 字节，<strong>20240129 / 20240206 完全为空</strong></td></tr>
       <tr><td class="c">column_6</td><td>交易所委托号</td><td class="c key">ORDER_OID</td><td>int32 收窄实测无损</td></tr>
       <tr><td class="c">column_7</td><td>委托类型</td><td class="c key">ORDER_TYPE</td><td>SZ：<span class="m">0 / 1 / U</span>　SH：<span class="m">A</span>=新增 <span class="m">D</span>=删除。<strong class="hit">2025 起多出 <span class="m">' '</span> 和 <span class="m">S</span></strong>（产品状态订单，6784 行/天，price=0 vol=0，schema 漏登记）</td></tr>

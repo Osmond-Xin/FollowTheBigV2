@@ -14,10 +14,13 @@
                                                   判定函数就是规则本身：int(float(s)) != int(s) 即 null。
                                                   因此 2^53 = 9007199254740992 保留，2^53+1 → null。实测语料里没有这种值）
 
-时间：九位 HHMMSSmmm → (h*3600+m*60+s)*1000+mmm；六位 HHMMSS 与五位 HMMSS（同一现象：厂商省掉了毫秒，小时不足两位时又省掉前导零，
-如 84500 = 08:45:00；秒位从不省略）→ 秒 ×1000，
-**只在缺陷账本登记 time_6digit 的天允许**；其他长度 → null；h>23 或 m>59 或 s>59 或 mmm>999 → null。
-归一化按行、按字符串长度（去掉首尾空白后），因为同一文件里混着两种。
+时间：九位 HHMMSSmmm 与**八位 HMMSSmmm**（10 点前小时不足两位时厂商省掉前导零，如 93000123 = 09:30:00.123；
+每天约 28% 的行是八位——2026-09-02 在 2022-01-27 三条流实测，数据表第四节检测子一栏「合法只有 8 或 9」早已写明，
+但第一版实现只认九位，把整个早盘静默置 null）→ (h*3600+m*60+s)*1000+mmm；
+六位 HHMMSS 与五位 HMMSS（同一现象：省掉毫秒后再省前导零，如 84500 = 08:45:00；秒位从不省略）→ 秒 ×1000，
+**只在缺陷账本登记 time_6digit 的天允许**；其他长度 → null；h>23 或 m>59 或 s>59 或 mmm>999 → null；
+首字符不是数字（含 +/- 号）→ null。归一化按行、按字符串长度（去掉首尾空白后），因为同一文件里混着两种。
+拆位用整数算术而不是字符串切片（同一串按数值拆 h/m/s/ms 与按位置切在纯数字串上等价，快 40%，且八位九位共用一条公式）。
 
 性能（2026-09-02 在 9 千万行的真实 orders 列上实测）：polars 不会合并表达式树里重复的 strip_chars，每个引用都重算一次
 （to_int64 引用 2 次、to_time_ms 引用 12 次），正则 ^[+-]?\\d+$ 再花 0.8 s。所以 store 先把要还原的列 strip **物化一次**，
@@ -50,6 +53,8 @@ def to_time_ms(column: str, *, allow_6digit: bool, pre_stripped: bool = False) -
     """时间字符串列 → 自午夜起毫秒 Int64。allow_6digit=False 时六位值 → null（调用方须先检查并硬失败）。"""
     raw = _raw(column, pre_stripped)
     length = raw.str.len_chars()
+    digits = raw.str.slice(0, 1).cast(pl.UInt8, strict=False).is_not_null()   # 首字符是数字：排除 +/- 号
+    n = raw.cast(pl.Int64, strict=False)                                       # 非纯数字串（小数点、字母）⇒ null
 
     def parse_ms(hour: pl.Expr, minute: pl.Expr, second: pl.Expr, millis: pl.Expr) -> pl.Expr:
         valid = (
@@ -61,31 +66,13 @@ def to_time_ms(column: str, *, allow_6digit: bool, pre_stripped: bool = False) -
         value = ((hour * 3600 + minute * 60 + second) * 1000 + millis).cast(pl.Int64)
         return pl.when(valid).then(value).otherwise(None)
 
-    nine = parse_ms(
-        raw.str.slice(0, 2).cast(pl.Int64, strict=False),
-        raw.str.slice(2, 2).cast(pl.Int64, strict=False),
-        raw.str.slice(4, 2).cast(pl.Int64, strict=False),
-        raw.str.slice(6, 3).cast(pl.Int64, strict=False),
-    )
-    six = parse_ms(
-        raw.str.slice(0, 2).cast(pl.Int64, strict=False),
-        raw.str.slice(2, 2).cast(pl.Int64, strict=False),
-        raw.str.slice(4, 2).cast(pl.Int64, strict=False),
-        pl.lit(0),
-    )
-    five = parse_ms(
-        raw.str.slice(0, 1).cast(pl.Int64, strict=False),
-        raw.str.slice(1, 2).cast(pl.Int64, strict=False),
-        raw.str.slice(3, 2).cast(pl.Int64, strict=False),
-        pl.lit(0),
-    )
+    with_millis = parse_ms(n // 10_000_000, n // 100_000 % 100, n // 1_000 % 100, n % 1_000)   # 九位 HHMMSSmmm / 八位 HMMSSmmm
+    no_millis = parse_ms(n // 10_000, n // 100 % 100, n % 100, pl.lit(0))                        # 六位 HHMMSS / 五位 HMMSS
     return (
-        pl.when(length == 9)
-        .then(nine)
-        .when((length == 6) & pl.lit(allow_6digit))
-        .then(six)
-        .when((length == 5) & pl.lit(allow_6digit))
-        .then(five)
+        pl.when(digits & length.is_between(8, 9))
+        .then(with_millis)
+        .when(digits & length.is_between(5, 6) & pl.lit(allow_6digit))
+        .then(no_millis)
         .otherwise(None)
     )
 

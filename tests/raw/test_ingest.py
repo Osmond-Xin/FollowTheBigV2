@@ -203,3 +203,26 @@ def test_ingest_other_partial_symbol_dirs_are_still_truncated_archives(tmp_path,
     with pytest.raises(RuntimeError, match="缺 stream CSV"):
         ingest(DAY, archive, root)
     assert not (root / "manifest" / f"{DAY:%Y%m%d}.json").exists()
+
+
+# ----------------------------------------------------------------- 八位时间（真实数据 2026-09-02 发现：早盘 10 点前省前导零，每天约 28% 的行）
+
+
+def test_eight_digit_morning_time_decodes_like_nine_digit():
+    """93000123 = 09:30:00.123 与 093000123 同值；100000040 / 95959440（数据表第二节 rg0 的 min/max 原文）；
+    五六位只在 allow_6digit 下解；带符号、七位、小数点 ⇒ null。"""
+    from ftbv2.core.raw.decode import to_time_ms
+    frame = pl.DataFrame({"t": ["93000123", "093000123", "100000040", "95959440", "84500", "093000", "+93000123", "9300012", "093000.12", ""]})
+    nine_only = frame.select(to_time_ms("t", allow_6digit=False).alias("v"))["v"].to_list()
+    assert nine_only == [34200123, 34200123, 36000040, 35999440, None, None, None, None, None, None]
+    with_short = frame.select(to_time_ms("t", allow_6digit=True).alias("v"))["v"].to_list()
+    assert with_short == [34200123, 34200123, 36000040, 35999440, 31500000, 34200000, None, None, None, None]
+
+
+def test_store_reads_morning_rows_with_non_null_time(archive, root, ledger):
+    """走完整链路：时间列经 RawStore 读回不是 null（夹具是九位；八位的等价性由上一条单元测试保证）。"""
+    ingest(DAY, archive, root)
+    store = RawStore(root, ledger)
+    req = ReadRequest("orders", (DAY,), ("time_ms",))
+    res = store.execute(plan(req, store.catalog("orders", (DAY,)), ledger))
+    assert res.frame["time_ms"].null_count() == 0 and res.frame.height == 6
