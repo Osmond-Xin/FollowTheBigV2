@@ -76,7 +76,10 @@ def parse_ledger(text: str) -> DefectLedger:
     data = tomllib.loads(text)
     entries = []
     seen: set[str] = set()
-    for row in data.get("defect", []):
+    for n, row in enumerate(data.get("defect", []), 1):
+        missing = [k for k in ("id", "code") if k not in row]
+        if missing:
+            raise ValueError(f"账本第 {n} 条缺字段 {missing}")
         ident = str(row["id"])
         if ident in seen:
             raise ValueError(f"账本 id 重复：{ident}")

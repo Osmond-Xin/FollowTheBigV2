@@ -6,7 +6,8 @@
 - 返回行序 = 文件序；
 - 只走 pre_buffer=True 的 pyarrow 读（ParquetFile.read_row_groups / read_table），再 `pl.from_arrow`；
   禁止 pl.read_parquet(use_pyarrow=True)（实测慢 13 倍）；
-- 未登记形状硬失败：账本未登记 time_6digit 的天出现六位时间 ⇒ RuntimeError 并指出天与 stream。
+- 未登记形状硬失败：账本未登记 time_6digit 的天出现六位时间 ⇒ RuntimeError 并指出天与 stream；
+  非空 row group 缺 _symbol statistics 的文件不是登记的形状 ⇒ catalog 时 RuntimeError（绝不静默裁掉真实数据）；
   只对本次投影实际读到的时间列检查（列裁剪不为此破例）；全字段的形状扫描是摄取与离线校验工具的职责；
   stream 目录里不符合 date=YYYYMMDD.parquet 的文件同样硬失败；
 - 输出多日时以 day 列区分（time_ms 每天从午夜归零）；
@@ -64,7 +65,10 @@ class RawStore:
             meta = pq.read_metadata(path)
             columns = tuple(meta.schema.names)
             symbol_index = columns.index(SYMBOL_COL)
-            row_groups = tuple(_row_group_meta(meta, i, symbol_index) for i in range(meta.num_row_groups))
+            try:
+                row_groups = tuple(_row_group_meta(meta, i, symbol_index) for i in range(meta.num_row_groups))
+            except RuntimeError as exc:
+                raise RuntimeError(f"{path}：{exc}") from exc
             files.append(FileMeta(path, stream, day, meta.num_rows, columns, row_groups))
         return Catalog(stream, tuple(files), tuple(missing))
 
@@ -130,9 +134,15 @@ def _row_group_meta(meta: pq.FileMetaData, index: int, symbol_index: int) -> Row
     group = meta.row_group(index)
     stats = group.column(symbol_index).statistics
     byte_size = sum(group.column(i).total_compressed_size for i in range(group.num_columns))
-    if group.num_rows == 0 or stats is None:
-        return RowGroupMeta(index, group.num_rows, byte_size, "", "")
+    if group.num_rows == 0:
+        return RowGroupMeta(index, 0, byte_size, "", "")
+    if stats is None or not stats.has_min_max or stats.min is None or stats.max is None:
+        raise RuntimeError(f"{meta_path(meta)} row group {index} 非空却没有 _symbol statistics，不是登记的形状")
     return RowGroupMeta(index, group.num_rows, byte_size, stats.min, stats.max)
+
+
+def meta_path(meta: pq.FileMetaData) -> str:
+    return getattr(meta, "_path", "parquet")
 
 
 def _read_row_groups(fp: FilePlan) -> pl.DataFrame:

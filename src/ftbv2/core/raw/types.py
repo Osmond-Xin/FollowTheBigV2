@@ -187,6 +187,7 @@ class StreamReceipt:
     n_rows_parquet: int
     header: str             # CSV 首行原文（GBK 解码，去掉行尾换行），让列语义从公理变成数据
     parquet_bytes: int
+    parquet_sha256: str     # 写出文件的哈希；幂等返回前必须核对，产物被替换或用别的 writer 重写都会被发现
     sha256_csv: str         # 规范帧的 sha256：按标的升序，每个标的贡献 symbol\\0header\\0body 三段（含长度前缀）
 
 

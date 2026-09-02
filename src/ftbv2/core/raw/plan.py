@@ -33,8 +33,15 @@ def plan(request: ReadRequest, catalog: Catalog, ledger: DefectLedger) -> ScanPl
     - 补丁按文件隔离：FilePlan.patches = ledger.patches(那一天, 那个 stream)；
       未登记而数据里出现六位时间是 execute 的硬失败，不在这里；
     - ScanPlan.ledger_sha256 = ledger.sha256；
-    - 未登记字段名 ⇒ KeyError（来自 schema.field），不静默。
+    - 未登记字段名 ⇒ KeyError（来自 schema.field），不静默；
+    - catalog.stream 必须等于 request.stream，且 catalog 必须覆盖 request.days 的每一天（在 files 或 missing_days 里），否则 ValueError。
     """
+    if catalog.stream != request.stream:
+        raise ValueError(f"stream 不一致：request={request.stream} catalog={catalog.stream}")
+    covered = {m.day for m in catalog.files} | set(catalog.missing_days)
+    uncovered = sorted(set(request.days) - covered)
+    if uncovered:
+        raise ValueError(f"catalog 未覆盖请求的天：{uncovered}")
     output_tail, projected = _output_and_projection(request)
     by_day = {meta.day: meta for meta in catalog.files}
     missing = set(catalog.missing_days)

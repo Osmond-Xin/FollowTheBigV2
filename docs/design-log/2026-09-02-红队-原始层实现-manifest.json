@@ -1,0 +1,38 @@
+{
+ "ran_at": "2026-09-02T05:27:25.121388+00:00",
+ "mode": "design",
+ "head": "5ae4408fe3b938812b580a0b53b097f70214745c",
+ "object_sha256": "9092189a87ac81a4abc1fb473714dcf9080ba19100fa9713f18a0661456d835d",
+ "context_sha256": "6a5e0a75a2f09e21a44881d25d2505825a8ab951d9e8f378779bcb0e0ca0fe96",
+ "lens_sha256": {
+  "工程.md": "5069df87fa270f07994eee71036e53ed3beb7c7a8f9faff05d02119829256200",
+  "方法论.md": "21ce0fa27ca1fb657431f3247c9b1e933555179cf4485ecf1fb74d5f57bbc6b3",
+  "架构.md": "5e12efa556ce78607593104570f0eb00658ca5c77e41fd61835de64321fadef4"
+ },
+ "runners": [
+  {
+   "name": "opencode",
+   "version": "/Users/osmond/.opencode/bin/opencode 1.18.26",
+   "exit": 0,
+   "verdict": "无有效裁决行",
+   "output": "/Users/osmond/Documents/project/FollowTheBigV2/docs/design-log/2026-09-02-红队-原始层实现-方法论.md",
+   "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "name": "agy",
+   "version": "/Users/osmond/.local/bin/agy 1.1.24",
+   "exit": 0,
+   "verdict": "裁决：不得合并",
+   "output": "/Users/osmond/Documents/project/FollowTheBigV2/docs/design-log/2026-09-02-红队-原始层实现-架构.md",
+   "output_sha256": "6a167880c50476fbce058a54cb8839eff646331ffb5c271ffe605e5db085532b"
+  },
+  {
+   "name": "codex",
+   "version": "/Users/osmond/.local/bin/codex codex-cli 0.146.0",
+   "exit": 0,
+   "verdict": "裁决：不得合并",
+   "output": "/Users/osmond/Documents/project/FollowTheBigV2/docs/design-log/2026-09-02-红队-原始层实现-工程.md",
+   "output_sha256": "39c6cabb5a6fff577e19ed88a45d38cfc4a56fab1b6fb5a35159715ccd0a5496"
+  }
+ ]
+}

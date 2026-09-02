@@ -14,7 +14,8 @@
                                                   判定函数就是规则本身：int(float(s)) != int(s) 即 null。
                                                   因此 2^53 = 9007199254740992 保留，2^53+1 → null。实测语料里没有这种值）
 
-时间：九位 HHMMSSmmm → (h*3600+m*60+s)*1000+mmm；六位 HHMMSS 与五位 HMMSS（同一现象：厂商省掉了毫秒与前导零）→ 秒 ×1000，
+时间：九位 HHMMSSmmm → (h*3600+m*60+s)*1000+mmm；六位 HHMMSS 与五位 HMMSS（同一现象：厂商省掉了毫秒，小时不足两位时又省掉前导零，
+如 84500 = 08:45:00；秒位从不省略）→ 秒 ×1000，
 **只在缺陷账本登记 time_6digit 的天允许**；其他长度 → null；h>23 或 m>59 或 s>59 或 mmm>999 → null。
 归一化按行、按字符串长度（去掉首尾空白后），因为同一文件里混着两种。
 """
@@ -29,7 +30,7 @@ from ftbv2.core.raw.types import Window
 
 def to_int64(column: str) -> pl.Expr:
     """字符串列 → Int64，遵守模块 docstring 里的边界表。"""
-    raw = pl.col(column)
+    raw = pl.col(column).str.strip_chars()       # 带首尾空白的超精度整数串不能逃过精度判定（复审建议）
     as_float = raw.cast(pl.Float64, strict=False)
     candidate = as_float.cast(pl.Int64, strict=False)
     exact_int = raw.cast(pl.Int64, strict=False)
@@ -94,8 +95,9 @@ def in_windows(time_ms_column: str, windows: tuple[Window, ...]) -> pl.Expr:
 
 
 def short_time_present(column: str) -> pl.Expr:
-    """去空白后长度 ≤ 7 的时间值是否存在（未登记 time_6digit 的天出现即硬失败）。"""
-    return (pl.col(column).str.strip_chars().str.len_chars() <= 7).fill_null(False).any()
+    """去空白后是 5 或 6 位纯数字的时间值是否存在（未登记 time_6digit 的天出现即硬失败）。
+    空串、7 位等其他形状不是这个缺陷：to_time_ms 会把它们置 null，不在这里误归因。"""
+    return pl.col(column).str.strip_chars().str.contains(r"^\d{5,6}$").fill_null(False).any()
 
 
 def decode_field(f: Field, *, allow_6digit: bool) -> pl.Expr:
