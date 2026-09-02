@@ -282,7 +282,7 @@
         <td><strong class="hit">6 位 HHMMSS 时间戳</strong><br><span class="note">厂商格式漂移，preserve 忠实保留</span></td>
         <td class="hit">共享的时段过滤原语用 <span class="m">t &lt; 93000000</span> 判断 ⇒ <strong>那天所有 SH 行被静默剔除，连续竞价段变成 SZ-only，不报错</strong>。该原语 <strong>fan-in = 56 个文件</strong></td>
         <td class="c">pl.col('column_4')<br>.str.len_bytes().min()<br><span class="note">合法只有 8 或 9；≤7 即污染</span><br><span class="key">已双向验证</span></td>
-        <td class="hit">确认 20240206 / 20240208。<strong>全语料范围未知</strong>——扫描待跑</td>
+        <td>20240206 / 20240208，<strong>只在 xinqing</strong>（各约 740 万行 5/6 位与 8/9 位混在同一文件；orders / trades 那两天全是 8/9 位）。2026-09-02 全语料扫描进行中（已扫 2022-01 → 2024-12：其余天三条流只有 8 与 9 位）</td>
       </tr>
       <tr>
         <td><strong>成交编号整列空 / 稀疏重复键</strong><br><span class="note">厂商侧缺陷，从源重下仍空</span></td>
@@ -294,7 +294,7 @@
         <td><strong class="hit">枚举漂移</strong></td>
         <td class="hit"><strong>手写 int8 枚举映射会把新值映射成 null 或撞码，而且无声</strong></td>
         <td class="c">distinct 值域比对</td>
-        <td>2025 年起：orders <span class="m">c7</span> 多出 <span class="m">' ' S</span>；<span class="m">c8</span> 多出 <span class="m">' ' C I J O</span>；trades <span class="m">c6</span> 多出 <span class="m">' '</span></td>
+        <td>2025 年起：orders <span class="m">c7</span> 多出 <span class="m">' ' S</span>；<span class="m">c8</span> 多出 <span class="m">' ' C I J O</span>；trades <span class="m">c6</span> 多出 <span class="m">' '</span>（20241126 已见空格）。无尾逗号的 56 天上同一位置是 <strong>null</strong> 而非空格</td>
       </tr>
       <tr>
         <td><strong>int32 溢出</strong></td>
@@ -306,13 +306,25 @@
         <td><strong>结构性残缺日</strong><br><span class="note">7z Data Error 后救援入库</span></td>
         <td class="hit">orders / trades <strong>标的集合不一致</strong> ⇒ 任何 <span class="m">orders ⋈ trades</span> 会遇到单边缺失。V1 的守卫是<strong>天级</strong>的，必须改成<strong>标的级</strong></td>
         <td class="c">两流成员数差</td>
-        <td>20260805（差 1：orders 3138 / trades 3139）· 20260811（差 3：3180 / 3177）。这两天也是 manifest 里缺的那两天</td>
+        <td>20260805（差 1：orders 3138 / trades 3139）· 20260811（差 3：3180 / 3177）。这两天也是 manifest 里缺的那两天。<strong>非救援日也有</strong>：20230807 / 20230810 / 20230811 各 1 只有成交无委托，20250731 1 只，20250804 3 只有成交无委托 + 3 只只有行情（无 7z，原因不可考）</td>
       </tr>
       <tr>
         <td><strong>停牌心跳</strong><br><span class="note">合法形状，不是缺陷；2026-09-02 实测裁定</span></td>
         <td>标的目录<strong>只有行情 CSV</strong>（每分钟一条、价格与十档全 0），无委托无成交 ⇒ 三 stream 标的数天然不等（V1 manifest：xinqing 3134 / orders 3128）。摄取放行并记入收据 <span class="m">quote_only_symbols</span>；只缺委托、成交之一，或缺行情，仍是残缺归档硬失败。「停牌」由日级参考层判定，摄取不猜</td>
         <td class="c">标的目录里的 CSV 文件集合</td>
-        <td>20220104：000780 / 002323 / 002722 / 600072 / 603227 / 605090（主板 6，含非主板共 13）· 20220105：12。每天都有</td>
+        <td>20220104：000780 / 002323 / 002722 / 600072 / 603227 / 605090（主板 6，含非主板共 13）· 20220105：12 · <strong>20220505：72</strong>（年报季停牌潮，重摄验证与 V1 xinqing−orders 差完全一致）。每天都有；V1 全语料均值 3.0 只/天</td>
+      </tr>
+      <tr>
+        <td><strong class="hit">0 字节 CSV</strong><br><span class="note">厂商导出缺陷；V1 静默排除该标的</span></td>
+        <td class="hit">某标的某 stream 的 CSV 在 7z 里 Size = 0（连表头都没有），该股当天其他两流正常。V2 摄取硬失败 ⇒ 该天无法从 7z 摄取；<strong>待裁决</strong>（V1 入库程序复审第四节：推荐登记进收据而不是静默）</td>
+        <td class="c">7zz l -slt 的 Size</td>
+        <td>20220627 <span class="m">605222.SH/行情.csv</span>（orders 11,154 行 / trades 7,224 行照常）。V1 manifest 反查另有 5 个非救援日标的级单边缺失（20230807 · 20230810 · 20230811 · 20250731 · 20250804），无 7z，原因不可考</td>
+      </tr>
+      <tr>
+        <td><strong>无尾逗号（少一列）</strong><br><span class="note">另一批导出程序；良性</span></td>
+        <td>三条流各少尾逗号幽灵列（orders 11 / trades 13 / xinqing 67 列 + _symbol），语义未错位（盘口不变量成立率与正常日相同）。但这些天<strong>枚举空值是 null 而非空格</strong>——读取层保持原值，下游须把 <span class="m">' '</span>、<span class="m">''</span>、null 视为同一个「无值」</td>
+        <td class="c">manifest n_cols</td>
+        <td>56 天：20241127 · 20260130 · 202602（12 天）· 202603（21 天）· 202604（21 天）</td>
       </tr>
       <tr>
         <td><strong>NUL 哨兵</strong></td>
@@ -331,6 +343,12 @@
         <td class="hit">2023-01 → 2026-07 的创业板 / 科创板逐笔数据<strong>随 7z 一起永久消失</strong></td>
         <td class="c">前缀白名单</td>
         <td>每天丢弃 300/301 共 1396 只 · 688/689 共 612 只 · ETF/基金/债约 2000 只 · B 股 77 只<br><span class="note">已决定沿用主板，不扩；V2 摄取同样按前缀筛选，是「不得删行」规则的显式例外（2026-09-02 裁定），丢弃按前缀计数进收据</span></td>
+      </tr>
+      <tr>
+        <td><strong>开盘重复帧</strong><br><span class="note">合法形状；preserve 不删</span></td>
+        <td>供应商在 09:30 / 13:00 每股各发两帧重复开盘快照。V1 派生层 <span class="m">unique(subset=[_symbol, OB_TIME], keep="first")</span> 去重；V2 preserve 保留，<strong>事件提取的切割规则必须处理</strong>（事件注册表）</td>
+        <td class="c">同 (标的, 时间) 重复快照</td>
+        <td>全语料（V1 公式一节 A 组原文）</td>
       </tr>
     </tbody>
   </table></div>
