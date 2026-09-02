@@ -20,10 +20,10 @@ FollowTheBig（V1）的推倒重建。研究目标不变——从 A 股 Level-2 
 **设计阶段收口，仓库与门禁已立，尚未写一行业务代码。** 所有设计决策（Q1–Q18 + 红队后九条）见 `design-log/2026-09-01-立项讨论.md`；
 深模块评审的四条高优先级已采纳（`design-log/2026-09-01-深模块评审.md`），中低项待裁决。
 
-- 仓库：`github.com/Osmond-Xin/FollowTheBigV2`（私有）。**分支保护需要 GitHub Pro 或转公开**，目前 main 未受保护。
+- 仓库：`github.com/Osmond-Xin/FollowTheBigV2`（公开）。main 受 ruleset 保护：只能经 PR 合入，须通过 `gate` 检查，禁止 force-push 与删除。
 - 包：`src/ftbv2/core`（纯逻辑核）/ `src/ftbv2/io`（IO 层）。import-linter 硬拒 core → io。
-- 门禁：`bash tools/gate.sh`（ruff · import-linter · 私有 import · 禁用词 · pytest），CI 同一入口（`.github/workflows/gate.yml`）。
-  **禁用词门禁当前红**：命中 5 处（V1 原文引用 + 词汇表渲染物），待裁决改文还是改豁免。
+- 门禁：`bash tools/gate.sh`（ruff · import-linter · 私有 import · 词汇 · pytest），CI 同一入口（`.github/workflows/gate.yml`）。
+  词汇门禁需要 `MINIMAX_API_KEY`（本机读 `~/.mmx/config.json`，CI 读仓库 secret）；判定不可用即门禁失败。
 - CRAP：`crapkit.toml`，只用 ratchet（基线已冻）。`uv run crapkit verify`。
 - 红队：`/redteam` skill → `tools/redteam/redteam.sh`，mmx / agy / codex 三路并行，攻击面在 `tools/redteam/lens/`。
 
@@ -41,7 +41,7 @@ FollowTheBig（V1）的推倒重建。研究目标不变——从 A 股 Level-2 
 - 结论落证据包 `.lineage/<id>/receipt.json`，**绝不写回代码注释**
 - 预注册 append-only；样本宇宙属于预注册；阈值只属于预注册
 - 裁决用经验置换检验，三态 + 附加标签；接口上没有旋钮
-- 「特征」是禁用词，一律说「因子」；`grep -rn '特征' --exclude=CONTEXT.md --exclude-dir=design-log . | grep -v '性能特征'` 必须无输出
+- 同一个概念只许一个词。**没有禁用词，没有豁免名单**：`tools/check_vocab.py` 按 CONTEXT.md 第八节的易混淆词表 grep 找候选，再由便宜的模型判定语义，并对改动文件查有没有引入与已有定义重叠的新定义
 - 不得声称原始层「逐行无损」——77% 的交易日无法验证
 - V1 派生库一个字节都不带进来；V1 结论（正负）全部待复验；V1 只是灵感来源
 

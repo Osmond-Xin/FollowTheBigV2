@@ -525,7 +525,7 @@ vpin          = Σ Vtau·|2Φ(dP/sdP)−1| / Σ Vtau            # BVC，只给�
       <tr><td>§D 承接·吸收</td><td>承接质量</td><td>高承接连板率反而更低</td></tr>
       <tr><td>§E 撤单·挂单距离</td><td>撤单率 / pdist</td><td><strong>OOS 复现失败</strong>：IS 3.28 perm 0 → OOS 1.14 perm 0.51</td></tr>
       <tr><td>§F spoof / UQ</td><td>假墙 / 极端失衡</td><td>spoof_seq≥3 残差真但稀有闸版不显著；max_abs_uq <strong>82% 股票饱和</strong></td></tr>
-      <tr><td>§I 执行·框架</td><td>各种持有期</td><td>naive 等权固定持有 OOS 每 horizon 全负；<strong>所有特征 lead-time &lt; 1 = 同步非提前</strong>；sweep≥2 T+1 接力 19% 锁板进不去 + 滑点 → 净负</td></tr>
+      <tr><td>§I 执行·框架</td><td>各种持有期</td><td>naive 等权固定持有 OOS 每 horizon 全负；<strong>所有因子 lead-time &lt; 1 = 同步非提前</strong>；sweep≥2 T+1 接力 19% 锁板进不去 + 滑点 → 净负</td></tr>
       <tr><td>§L 启动触发器</td><td>box_break / vol_surge</td><td>追可见动量 = 接盘。<strong class="key">唯一 🟢 存活</strong>：<span class="m">net_hi_quiet ∧ max_abs_uq高</span>，early +2.79%/胜 71%，oos +0.58%/胜 51%，perm 双段 0.000</td></tr>
       <tr><td>§M A2 真承接（buy_absorb）</td><td>主动买被吸收</td><td><strong>核心假说证伪且方向相反</strong>，两段都负 perm=1.00</td></tr>
       <tr><td>§N 股东人数下降</td><td>= 吸筹</td><td>三段全伤；辛普森式反转，<strong>切勿读成「股东数 = 负催化剂」</strong></td></tr>

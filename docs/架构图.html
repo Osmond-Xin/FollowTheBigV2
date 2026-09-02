@@ -122,7 +122,7 @@
 <section id="why">
   <p class="eyebrow">01 — 共同前提</p>
   <h2>为什么按知识切，而不是按层切</h2>
-  <p>V1 是分层的：原始 → 特征 → 面板 → 信号 → 回测。结果是 <span class="m">scripts/</span> 与 <span class="m">src/</span> 的行数比达到 <strong>24:1</strong>，684 个顶层脚本里 473 个从未被任何文件 import。</p>
+  <p>V1 是分层的：原始 → 因子 → 面板 → 信号 → 回测。结果是 <span class="m">scripts/</span> 与 <span class="m">src/</span> 的行数比达到 <strong>24:1</strong>，684 个顶层脚本里 473 个从未被任何文件 import。</p>
   <p><strong>分层不产生模块化。</strong>层没有窄接口，于是每个脚本都能伸手进每一层。切法的推导起点不是「系统有哪些功能」，而是：<em>哪些知识一旦泄漏，就会重演已经发生过的事故？</em></p>
   <div class="scroll"><table>
     <thead><tr><th>泄漏的知识</th><th>后果（V1 实测）</th><th>散落规模</th></tr></thead>
@@ -414,7 +414,7 @@
     <div class="open-item"><span class="open-k">最大风险</span><p><strong>不是被攻破，是被绕过。</strong>摩擦一旦大到某个程度，研究员会活在沙盒里手抄结论。血缘校验拒得了沙盒产物，拦不住手抄的结论。必须有一条「快速探索也走计划」的低摩擦路径。</p></div>
     <div class="open-item"><span class="open-k">判断前置</span><p>事件提取器里嵌着「记哪些字段」这个决定，锁在 15 小时才能重跑的位置。缓解：宽而中性，只抽统计量。但「宽」本身有代价——三个数字里的第三个就是它。</p></div>
     <div class="open-item"><span class="open-k">公理</span><p><strong>列位表无法被证明。</strong>表头在摄取时被丢掉，没有真值源；金标准回归也是用这张表生成的，存在循环。已用幸存 7z 的真实 GBK 表头逐字段对照 + V1 设计文档双重印证，但仍须一次性人工校准并留证据。</p></div>
-    <div class="open-item"><span class="open-k">时间戳</span><p><span class="m">_cont_session_mask</span>（fan-in 56）在 6 位时间戳的天上会静默丢掉整个交易所。正确检测子已验证（<span class="m">str.len_bytes().min()</span>），全语料扫描待空闲窗口执行。<strong>范围未知之前，任何走这条原语的组件都是地雷。</strong></p></div>
+    <div class="open-item"><span class="open-k">时间戳</span><p><span class="m">_cont_session_mask</span>（fan-in 56）在 6 位时间戳的天上会静默丢掉整个交易所。正确检测子已验证（<span class="m">str.len_bytes().min()</span>），全语料扫描待空闲窗口执行。<strong>范围未知之前，任何走这条原语的模块都是地雷。</strong></p></div>
     <div class="open-item"><span class="open-k">存储</span><p>先改读取代码（零迁移拿到 43.8× / 25×），做完再评估重编码。若重编码必须含 <span class="m">DELTA_BINARY_PACKED</span>——只改 dtype 会让文件<strong>变大 7–25%</strong>。</p></div>
   </div>
 </section>
