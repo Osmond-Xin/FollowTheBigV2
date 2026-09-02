@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tools.check_architecture import BEGIN, END, check, check_coverage, check_imports, load, render_contracts, write_setup_cfg
+from tools.check_architecture import BEGIN, END, check, check_coverage, check_imports, compare_declarations, load, render_contracts, write_setup_cfg
 
 ROOT = Path(__file__).resolve().parents[2]
 DECL = '''[pure]
@@ -57,10 +57,10 @@ def test_real_repo_passes_and_generated_block_matches():
 
 def test_undeclared_package_and_planned_package_present(tmp_path):
     root = _tree(tmp_path)
-    assert check(root) == []
+    assert check(root, baseline={}) == []
     (root / "src/ftbv2/io/rogue").mkdir()
     (root / "src/ftbv2/io/rogue/__init__.py").write_text("", encoding="utf-8")
-    assert any("图上没有的模块" in p for p in check(root))
+    assert any("图上没有的模块" in p for p in check(root, baseline={}))
     (root / "src/ftbv2/core/later").mkdir()
     (root / "src/ftbv2/core/later/__init__.py").write_text("", encoding="utf-8")
     assert any("标为 planned 但 src 里已有" in p for p in check_coverage(root, {m["name"]: m for m in load(root)["module"]}))
@@ -70,9 +70,9 @@ def test_setup_cfg_must_match_declaration(tmp_path):
     root = _tree(tmp_path)
     cfg = root / "setup.cfg"
     cfg.write_text(cfg.read_text(encoding="utf-8").replace("    os\n", ""), encoding="utf-8")
-    assert any("不一致" in p for p in check(root))
+    assert any("不一致" in p for p in check(root, baseline={}))
     cfg.write_text("[metadata]\n", encoding="utf-8")
-    assert any("缺少 architecture 生成区块" in p for p in check(root))
+    assert any("缺少 architecture 生成区块" in p for p in check(root, baseline={}))
 
 
 def test_cross_module_imports_only_from_top_level_all(tmp_path):
@@ -84,9 +84,40 @@ def test_cross_module_imports_only_from_top_level_all(tmp_path):
     assert any("不在 ftbv2.core.a 的 __all__ 里" in p for p in check_imports(root, mods))
     root = _tree(tmp_path, a_init="x = 1\n")
     assert any("没有 __all__" in p for p in check_imports(root, mods))
-    root = _tree(tmp_path, b_init='import importlib, sys\nsys.path.insert(0, "x")\nm = importlib.import_module("ftbv2.core.a")\n__all__ = []\n')
+    root = _tree(tmp_path, b_init='import importlib as il\nimport sys\np = sys.path\np[0:0] = ["x"]\n__all__ = []\n')
     problems = check_imports(root, mods)
-    assert any("动态 import" in p for p in problems) and any("sys.path" in p for p in problems)
+    assert any("importlib" in p for p in problems) and any("sys.path" in p for p in problems)
+    root = _tree(tmp_path, b_init='from importlib import import_module\n__all__ = []\n')
+    assert any("from importlib" in p for p in check_imports(root, mods))
+    root = _tree(tmp_path, b_init='import ftbv2.core.a\n__all__ = []\n')
+    assert any("跨模块禁止 `import ftbv2…`" in p for p in check_imports(root, mods))
+    root = _tree(tmp_path, b_init='from ftbv2.core import a\n__all__ = []\n')
+    assert any("命名空间根" in p for p in check_imports(root, mods))
+    root = _tree(tmp_path, b_init='from ...core.a.inner import x\n__all__ = []\n')
+    (root / "src/ftbv2/core/a/inner.py").write_text("x = 1\n", encoding="utf-8")
+    assert any("只能从 ftbv2.core.a 顶层 import" in p for p in check_imports(root, mods))
+    root = _tree(tmp_path, a_init='from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from ftbv2.io.b import y\n__all__ = ["x"]\nx = 1\n')
+    assert any("未声明依赖 io.b" in p for p in check_imports(root, mods))
     root = _tree(tmp_path, b_init='from ftbv2.io.b.helper import z\n__all__ = ["z"]\n')
     (root / "src/ftbv2/io/b/helper.py").write_text("z = 1\n", encoding="utf-8")
     assert check_imports(root, mods) == []          # 模块内部可以深路径 import
+
+
+def test_declaration_is_monotonic_against_baseline(tmp_path):
+    root = _tree(tmp_path)
+    old = load(root)
+    import tomllib
+    weaker = tomllib.loads(DECL.replace('forbidden = ["ftbv2.io", "os"]', 'forbidden = ["ftbv2.io"]'))
+    assert any("只能增不能删" in p for p in compare_declarations(old, weaker, root))
+    downgraded = tomllib.loads(DECL.replace('kind = "pure"\ndiagram = "A"', 'kind = "io"\ndiagram = "A"'))
+    assert any("降级" in p for p in compare_declarations(old, downgraded, root))
+    moved = tomllib.loads(DECL.replace('package = "ftbv2.core.a"', 'package = "ftbv2.core.a2"'))
+    assert any("package 不可改" in p for p in compare_declarations(old, moved, root))
+    gone = tomllib.loads(DECL.split("[[module]]\nname = \"core.later\"")[0])
+    assert any("不得删除" in p for p in compare_declarations(old, gone, root))
+    more = tomllib.loads(DECL.replace('depends_on = []\n[[module]]\nname = "io.b"', 'depends_on = []\n[[module]]\nname = "io.b"').replace('depends_on = ["core.a"]', 'depends_on = ["core.a", "core.later"]'))
+    assert any("必须带 deps_decision" in p for p in compare_declarations(old, more, root))
+    (root / "docs").mkdir(); (root / "docs" / "adr.md").write_text("ok", encoding="utf-8")
+    justified = tomllib.loads(DECL.replace('depends_on = ["core.a"]', 'depends_on = ["core.a", "core.later"]\ndeps_decision = "docs/adr.md"'))
+    assert compare_declarations(old, justified, root) == []
+    assert compare_declarations({}, old, root) == []              # 引导：基线里没有声明文件
