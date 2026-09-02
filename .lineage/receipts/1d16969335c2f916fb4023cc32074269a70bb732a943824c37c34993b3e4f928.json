@@ -1,21 +1,19 @@
 {
- "argv": [
-  "tools/audit_preserve.py",
-  "compare",
-  "--a",
-  "/Volumes/辛的硬盘/data/preserve",
-  "--b",
-  "/Volumes/xin/FollowTheBigV2-raw",
-  "--day",
-  "2022-01-04"
- ],
- "inputs": {
+ "args": {
   "a": "/Volumes/辛的硬盘/data/preserve",
-  "b": "/Volumes/xin/FollowTheBigV2-raw"
+  "b": "/Volumes/xin/FollowTheBigV2-raw",
+  "cmd": "compare",
+  "day": "2022-01-04"
+ },
+ "inputs": {
+  "a_files": "1e1a1ecd48c5626d2fb7d019d7b4dc97177b78dd983320c0d106b4f59cdbaa58",
+  "b_files": "44bc73d17c217d00c15bff89c2e1133c7197798ce7fd9edba12b92d17e8be516"
  },
  "kind": "audit_preserve.compare",
  "outputs": {},
- "receipt_id": "d37f85a9de400266",
+ "receipt_id": "1d16969335c2f916fb4023cc32074269a70bb732a943824c37c34993b3e4f928",
+ "source_dirty": "true",
+ "source_tree": "8c24e10c174b71de249b4ca3f35745f1860e5cfe",
  "summary": {
   "day": "2022-01-04",
   "identical_modulo_null": true,
@@ -25,6 +23,7 @@
     "null_columns_a": {
      "column_11": 102454526
     },
+    "null_columns_b": {},
     "row_groups": [
      834,
      834
@@ -41,6 +40,7 @@
     "null_columns_a": {
      "column_13": 85718829
     },
+    "null_columns_b": {},
     "row_groups": [
      698,
      698
@@ -59,6 +59,7 @@
      "column_11": 13035997,
      "column_67": 13035997
     },
+    "null_columns_b": {},
     "row_groups": [
      107,
      107
@@ -72,7 +73,8 @@
    }
   ]
  },
- "tool": "/Users/osmond/Documents/project/FollowTheBigV2/tools/audit_preserve.py",
- "tool_sha256": "d360e4eb9b53fa0863b988459de02ccbed6ccb9b4d5fe229591c48af08d3021e",
- "written_at": "2026-09-02T21:57:08+00:00"
+ "tool": "audit_preserve.py",
+ "tool_sha256": "55c430b1837c30431f68b558ae78a8b3878e1aff7d7c68d226fb35f74f036f50",
+ "uv_lock_sha256": "d0c5d4bbb55593db06d8df0605d7b6ad85c35be1f5581d2d1444a69495894476",
+ "written_at": "2026-09-02T22:08:11+00:00"
 }
