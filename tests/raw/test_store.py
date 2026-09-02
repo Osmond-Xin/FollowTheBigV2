@@ -22,13 +22,13 @@ def read(store, ledger, **kw):
 
 
 def test_store_fails_loud_when_root_missing(tmp_path, ledger):
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match="not-mounted"):        # 消息必须指出路径
         RawStore(tmp_path / "not-mounted", ledger)
 
 
 def test_store_fails_loud_when_stream_dir_missing(root, ledger):
     (root / "xinqing").rmdir()
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match="xinqing"):             # 消息必须指出缺哪个 stream
         RawStore(root, ledger)
 
 
