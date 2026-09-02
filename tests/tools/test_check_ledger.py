@@ -101,11 +101,58 @@ def test_superseded_by_must_exist_and_is_immutable():
     assert any("superseded_by 一旦设置不可改" in p for p in compare(old, moved))
 
 
+MANIFEST = 'scanned_at = 2026-09-02\ntool = "t"\ninput = "i"\ninput_sha256 = "0"\n'
+
+
 def test_observed_codes_must_be_active_registered(tmp_path):
+    (tmp_path / "manifest.toml").write_text(MANIFEST, encoding="utf-8")
     (tmp_path / "scan.toml").write_text('codes = ["seq_empty", "never_seen", "rescue_partial"]\n', encoding="utf-8")
     ledger = full_ledger(rescue_partial=entry("D004", "rescue_partial", status="pending"))
     (problem,) = check_observed(ledger, tmp_path)
     assert "never_seen" in problem and "rescue_partial" in problem      # pending 不算已登记
-    assert check_observed(full_ledger(), tmp_path / "missing") == []
     (tmp_path / "bad.toml").write_text("codes = [", encoding="utf-8")
     assert any("不可解析" in p for p in check_observed(full_ledger(), tmp_path))
+
+
+def test_scope_cannot_be_narrowed_by_adding_fields():
+    structural = entry("D005", "enum_drift").replace("days = [2024-01-02]\n", "").replace('read_layer_action = "gap"', 'read_layer_action = "none"')
+    old = full_ledger(enum_drift=structural)
+    narrowed = full_ledger(enum_drift=structural.replace('kind = "defect"\n', 'kind = "defect"\ndays = [2024-01-02]\n'))
+    assert any("结构性条目不可加 days" in p for p in compare(old, narrowed))
+    single = full_ledger(enum_drift=structural.replace('kind = "defect"\n', 'kind = "defect"\nstream = "orders"\n'))
+    assert any("stream 作用域不可改" in p for p in compare(old, single))
+
+
+def test_new_entries_start_only_as_pending_or_active():
+    old = full_ledger()
+    sneaked = old + entry("D900", "ghost", status="rejected")
+    assert any("新增条目只能是 pending / active" in p for p in compare(old, sneaked))
+    buried = old + entry("D901", "ghost2", status="superseded", extra='superseded_by = "D001"\n')
+    assert any("新增条目只能是 pending / active" in p for p in compare(old, buried))
+
+
+def test_superseded_by_rejects_self_and_dead_targets():
+    self_ref = full_ledger(seq_empty=entry("D002", "seq_empty", status="superseded", extra='superseded_by = "D002"\n'))
+    assert "另一条 active / pending" in validate(self_ref)[0]
+    dead = full_ledger(seq_empty=entry("D002", "seq_empty", status="superseded", extra='superseded_by = "D003"\n'),
+                       seq_sparse_dup=entry("D003", "seq_sparse_dup", status="rejected"))
+    assert any("另一条 active / pending" in p for p in validate(dead))
+
+
+def test_evidence_sha256_binds_file_content(tmp_path):
+    f = tmp_path / "ev.md"; f.write_text("v1", encoding="utf-8")
+    import hashlib
+    good = full_ledger(seq_empty=entry("D002", "seq_empty", evidence=str(f), extra=f'evidence_sha256 = "{hashlib.sha256(b"v1").hexdigest()}"\n'))
+    assert validate(good) == []
+    f.write_text("v2", encoding="utf-8")
+    assert any("证据被改写" in p for p in validate(good))
+
+
+def test_observed_manifest_is_mandatory(tmp_path):
+    assert "manifest.toml 不存在" in check_observed(full_ledger(), tmp_path)[0]
+    assert check_observed(Path("ledger/defects.toml").read_text(encoding="utf-8"), Path("ledger/observed")) == []
+
+
+def test_gate_never_passes_unsafe_base():
+    assert "--unsafe-base" not in Path("tools/gate.sh").read_text(encoding="utf-8")
+    assert "--unsafe-base" not in Path(".github/workflows/gate.yml").read_text(encoding="utf-8")

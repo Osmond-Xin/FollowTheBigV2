@@ -38,6 +38,11 @@ jobs:
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
         run: bash tools/gate.sh
 
+      - name: 账本门禁（基线版实现；被审 PR 不能给自己当裁判）
+        run: |
+          git worktree add --detach /tmp/base origin/main
+          PYTHONPATH=/tmp/base/src uv run python /tmp/base/tools/check_ledger.py ledger/defects.toml
+
       - name: 增量覆盖率（仅纯逻辑核，PR 时）
         if: github.event_name == 'pull_request'
         run: |

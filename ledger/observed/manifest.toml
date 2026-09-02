@@ -1,0 +1,6 @@
+# 工具扫描的观测清单：观测到的 code 必须 ⊆ 账本 active 登记（tools/check_ledger.py check_observed）。
+# 每个观测文件（*.toml）写 codes = [...]；本清单记录扫描范围与输入哈希。收据规则（工程管束 R1）落地后 tool 改为收据 id。
+scanned_at = 2026-09-02
+tool = "scratchpad/time_shape_scan.py（待第 2 步工具化为 tools/scan_shapes.py）"
+input = "/Volumes/辛的硬盘/data/preserve 1122 天 × 3 流 column_4，V1 manifest 1120 天"
+input_sha256 = "e58aeb7bf2172e3fc5eae70ac5de517f865cb8d18f35a52367bc610dfdca9053"

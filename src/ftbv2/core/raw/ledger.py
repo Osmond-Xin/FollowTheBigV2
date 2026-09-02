@@ -61,6 +61,7 @@ class Defect:
     evidence: str = ""             # 收据 id 或 design-log 引用
     read_layer_action: str = "gap"
     decision_ref: str | None = None   # 形状转 active 的裁决出处（design-log / PR）
+    evidence_sha256: str | None = None   # 证据内容哈希（收据规则落地后必填；有则门禁核对）
     note: str = ""
 
 
@@ -128,7 +129,7 @@ def _parse_entry(n: int, row: dict) -> Defect:
     if kind == "shape" and status == "active" and not row.get("decision_ref"):
         raise ValueError(f"账本 {ident}：形状转 active 必须带 decision_ref（裁决出处）")
     return Defect(ident, code, stream, days, kind, status, row.get("superseded_by"), _date(row["created_at"]),
-                  str(row["evidence"]), action, row.get("decision_ref"), row.get("note", ""))
+                  str(row["evidence"]), action, row.get("decision_ref"), row.get("evidence_sha256"), row.get("note", ""))
 
 
 def parse_ledger(text: str) -> DefectLedger:
@@ -140,7 +141,14 @@ def parse_ledger(text: str) -> DefectLedger:
     if dup:
         raise ValueError(f"账本 id 重复：{dup[0]}")
     entries = tuple(_parse_entry(n, row) for n, row in enumerate(rows, 1))
+    by_id = {d.id: d for d in entries}
     for d in entries:
-        if d.superseded_by is not None and d.superseded_by not in ids:
-            raise ValueError(f"账本 {d.id} 的 superseded_by 指向不存在的 id {d.superseded_by}")
+        if d.superseded_by is None:
+            continue
+        target = by_id.get(d.superseded_by)
+        if target is None or target.id == d.id or target.status not in LIVE:
+            raise ValueError(f"账本 {d.id} 的 superseded_by 必须指向另一条 active / pending 条目（现为 {d.superseded_by}）")
+    for d in entries:
+        if d.evidence_sha256 is not None and len(d.evidence_sha256) != 64:
+            raise ValueError(f"账本 {d.id} 的 evidence_sha256 必须是 64 位十六进制")
     return DefectLedger(entries, hashlib.sha256(text.encode("utf-8")).hexdigest())
