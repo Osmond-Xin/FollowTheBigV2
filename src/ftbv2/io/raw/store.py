@@ -36,7 +36,8 @@ class RawStore:
 
     def execute(self, plan: ScanPlan) -> ReadResult:
         """按计划读取：只读 plan.files 指定的 row group 与列；扫描后过滤；按 FilePlan.patches 逐文件解码；裁到 output_fields。
-        缺口归因只用本 stream 的事实与账本：天缺文件 → DAY_MISSING；请求的标的不在文件里 → SYMBOL_ABSENT，
+        缺口归因只用本 stream 的事实与账本：天缺文件 → 该天只产生一条 DAY_MISSING，不再为每个请求标的展开 SYMBOL_ABSENT；
+        文件存在而请求的标的不在其中 → SYMBOL_ABSENT；时间窗过滤后为空不是缺口（标的在文件里）。
         并把账本为该天该 stream 登记的缺陷码（如 rescue_partial）放进 Gap.defects——不偷读别的 stream。
         stats 来自 FilePlan 里的 footer 元数据。"""
         raise NotImplementedError
