@@ -117,7 +117,7 @@ class FilePlan:
     columns: tuple[str, ...]                 # 物理投影，可能比输出多（过滤或补丁所需），返回前裁掉
     row_groups: tuple[RowGroupMeta, ...]     # 要读的 row group（未裁剪时 = 全部）
     pruned: bool                             # 是否按 _symbol statistics 裁剪过
-    patches: tuple[str, ...]                 # 缺陷账本为**这一天这个 stream** 触发的补丁码（ledger.PATCH_CODES ∩ 按天登记），按文件隔离
+    patches: tuple[str, ...]                 # 缺陷账本为**这一天这个 stream** 触发的补丁码（账本 read_layer_action = patch 的按天条目），按文件隔离
     total_row_groups: int
     total_bytes: int
 

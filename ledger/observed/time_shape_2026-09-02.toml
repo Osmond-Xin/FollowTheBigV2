@@ -1,0 +1,2 @@
+# 2026-09-02 全语料时间形状扫描 + V1 manifest 反查观测到的形状（design-log/2026-09-02-时间形状扫描.tsv）
+codes = ["time_6digit", "leading_zero_time", "no_trailing_comma", "stream_symbol_mismatch", "quote_only"]
