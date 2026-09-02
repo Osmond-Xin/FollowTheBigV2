@@ -34,6 +34,8 @@ def ingest(
 ) -> IngestReceipt:
     """archive 内布局 {YYYYMMDD}/{symbol}/{行情,逐笔委托,逐笔成交}.csv（也接受无日期前缀的扁平布局）。
     CSV：GBK 表头一行 + 纯 ASCII 数据行，所有字段按字符串原样保留（含 '\\x00'）。
+    只有表头、零数据行的 CSV 是合法的（全天无委托 / 无成交），照常计数为 0；标的目录里**缺少**某个 stream 的 CSV 文件
+    则是残缺归档 ⇒ RuntimeError。
     已完成（manifest 三 stream 齐全且 archive_sha256、prefixes 相同）的天直接返回既有 receipt，不重做。
     scratch_parent：临时解包目录的父目录（默认系统临时目录）；实际解包目录用 mkdtemp 私有创建。"""
     from ftbv2.io.raw._ingest_impl import ingest_day

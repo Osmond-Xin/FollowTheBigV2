@@ -6,12 +6,13 @@ import datetime as dt
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ftbv2.core.raw.schema import Stream
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:                       # 纯核不 import pathlib：Path 只作类型出现（codex 实现时指出）
+    from pathlib import Path
+
     import polars as pl
 
 Day = dt.date
