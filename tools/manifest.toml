@@ -1,0 +1,63 @@
+# 工具登记表（tools/check_entrypoints.py 校验）：仓库里每个可执行入口都在这里，且只能在 tools/ 下。
+# kind = gate：自包含裁判（不得 import ftbv2，无行数上限）；adapter：薄壳（argparse → src 公开接口 → 输出 + 收据，≤ 120 行）。
+# 每个工具必须有真正调用它的烟雾测试；跑出的数字进账本 / 数据表 / design-log 必须带收据（ftbv2.io.receipt）。
+
+[[tool]]
+path = "tools/gate.sh"
+kind = "gate"
+purpose = "本地与 CI 共用的门禁入口：ruff · import-linter · 私有符号 · 账本 · 入口 · 词汇 · pytest"
+smoke_test = "tests/tools/test_tools_smoke.py"
+
+[[tool]]
+path = "tools/redteam/redteam.sh"
+kind = "gate"
+purpose = "三方异构红队（opencode / agy / codex）：设计简报或工作区变更"
+smoke_test = "tests/tools/test_tools_smoke.py"
+
+[[tool]]
+path = "tools/check_private_imports.py"
+kind = "gate"
+purpose = "跨模块私有符号 import 检查"
+smoke_test = "tests/tools/test_tools_smoke.py"
+
+[[tool]]
+path = "tools/check_vocab.py"
+kind = "gate"
+purpose = "词汇门禁：易混淆词表 grep → MiniMax 语义判定 → 定义冲突"
+smoke_test = "tests/tools/test_tools_smoke.py"
+
+[[tool]]
+path = "tools/check_ledger.py"
+kind = "gate"
+purpose = "缺陷与形状账本：结构 / 证据绑定 / 枚举相等 / 语义 append-only / 观测批次"
+smoke_test = "tests/tools/test_check_ledger.py"
+
+[[tool]]
+path = "tools/check_entrypoints.py"
+kind = "gate"
+purpose = "入口门禁：可执行入口只能在 tools/ 且登记于本表；无 scripts/"
+smoke_test = "tests/tools/test_tools_smoke.py"
+
+[[tool]]
+path = "tools/ingest_days.py"
+kind = "adapter"
+purpose = "批量摄取：归档 → ftbv2.io.raw.ingest.ingest_days → JSON + 收据（非规范文件名与磁盘余量在 src 判）"
+smoke_test = "tests/tools/test_tools_smoke.py"
+
+[[tool]]
+path = "tools/audit_preserve.py"
+kind = "adapter"
+purpose = "原始层审计：两份 preserve 逐 row group 比对 / 跨流标的集合差 → JSON + 收据"
+smoke_test = "tests/tools/test_tools_smoke.py"
+
+[[tool]]
+path = "tools/scan_shapes.py"
+kind = "adapter"
+purpose = "全语料时间形状扫描 → TSV（可续跑）+ 收据"
+smoke_test = "tests/tools/test_tools_smoke.py"
+
+[[tool]]
+path = "tools/bench_read.py"
+kind = "adapter"
+purpose = "RawStore 全字段读取耗时基准 → JSON + 收据"
+smoke_test = "tests/tools/test_tools_smoke.py"

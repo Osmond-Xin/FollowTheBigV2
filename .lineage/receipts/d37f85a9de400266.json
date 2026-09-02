@@ -1,0 +1,78 @@
+{
+ "argv": [
+  "tools/audit_preserve.py",
+  "compare",
+  "--a",
+  "/Volumes/辛的硬盘/data/preserve",
+  "--b",
+  "/Volumes/xin/FollowTheBigV2-raw",
+  "--day",
+  "2022-01-04"
+ ],
+ "inputs": {
+  "a": "/Volumes/辛的硬盘/data/preserve",
+  "b": "/Volumes/xin/FollowTheBigV2-raw"
+ },
+ "kind": "audit_preserve.compare",
+ "outputs": {},
+ "receipt_id": "d37f85a9de400266",
+ "summary": {
+  "day": "2022-01-04",
+  "identical_modulo_null": true,
+  "streams": [
+   {
+    "cells_differ": {},
+    "null_columns_a": {
+     "column_11": 102454526
+    },
+    "row_groups": [
+     834,
+     834
+    ],
+    "rows": [
+     102454526,
+     102454526
+    ],
+    "schema_equal": true,
+    "stream": "orders"
+   },
+   {
+    "cells_differ": {},
+    "null_columns_a": {
+     "column_13": 85718829
+    },
+    "row_groups": [
+     698,
+     698
+    ],
+    "rows": [
+     85718829,
+     85718829
+    ],
+    "schema_equal": true,
+    "stream": "trades"
+   },
+   {
+    "cells_differ": {},
+    "null_columns_a": {
+     "column_10": 13035997,
+     "column_11": 13035997,
+     "column_67": 13035997
+    },
+    "row_groups": [
+     107,
+     107
+    ],
+    "rows": [
+     13035997,
+     13035997
+    ],
+    "schema_equal": true,
+    "stream": "xinqing"
+   }
+  ]
+ },
+ "tool": "/Users/osmond/Documents/project/FollowTheBigV2/tools/audit_preserve.py",
+ "tool_sha256": "d360e4eb9b53fa0863b988459de02ccbed6ccb9b4d5fe229591c48af08d3021e",
+ "written_at": "2026-09-02T21:57:08+00:00"
+}

@@ -11,8 +11,9 @@
 - 归档条目校验：拒绝绝对路径、含 ".." 的路径、符号链接（7zz -slt 的属性列 Unix 模式串以 l 开头）、规范化后重复的路径；
   解出的每个文件 resolve 后必须在 scratch 之下且非链接、非硬链接；违反即 RuntimeError 且 root 无任何改动；
   7zz 自身失败也转成 RuntimeError；
-- 标的目录名必须匹配 ^\d{6}\.[A-Z]{2,3}$（归档里可有 .BJ 等，形状合法即可；主板与否由前缀决定）；同一 stream 内所有标的的表头必须逐字节一致；
-  数据体必须是纯 ASCII（非法字节硬失败，不做 lossy 替换）；0 字节或无表头的 CSV 硬失败；归档里非三类 CSV 的文件硬失败；
+- 标的目录名必须匹配 ^\\d{6}\\.[A-Z]{2,3}$（归档里可有 .BJ 等，形状合法即可；主板与否由前缀决定）；同一 stream 内所有标的的表头必须逐字节一致；
+  数据体必须是纯 ASCII（非法字节硬失败，不做 lossy 替换）；**0 字节的 CSV = 该标的该 stream 无数据**（账本 D009 empty_file，2026-09-02 裁定）：
+  登记进 receipt.empty_files，该标的不进该 stream、不计入 n_symbols，绝不静默；有字节但无表头的 CSV 仍硬失败；归档里非三类 CSV 的文件硬失败；
 - 7zz 调用带超时（列目录 10 分钟、解包 4 小时）；
 - 前缀筛选（默认 schema.MAIN_PREFIXES，只存主板）：这是「不得在未声明样本宇宙前删除行」的**显式例外**（Q15，2026-09-02 用户裁定），
   被筛掉的标的按前缀计数进 receipt——丢弃是决策，不是静默；归档里不认识的 CSV 文件名硬失败；
@@ -32,15 +33,19 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import uuid
-from dataclasses import asdict
+from collections.abc import Sequence
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from ftbv2.core.raw.schema import CSV_NAME, MAIN_PREFIXES, ROW_GROUP_ROWS, STREAMS, SYMBOL_COL, Stream, manifest_relpath, parquet_relpath
+from ftbv2.core.raw.schema import (
+    CSV_NAME, MAIN_PREFIXES, ROW_GROUP_ROWS, STREAMS, SYMBOL_COL, Stream, archive_day, manifest_relpath, parquet_relpath,
+)
 from ftbv2.core.raw.types import Day, IngestReceipt, Quality, StreamReceipt
 
 _STREAM_OF_CSV = {name: stream for stream, name in CSV_NAME.items()}
@@ -95,8 +100,10 @@ def ingest(
         _validate_extracted(scratch)
         csvs, dropped, quote_only = _discover_csvs(scratch, day, tuple(prefixes))
         receipts: list[StreamReceipt] = []
+        empty: list[tuple[str, str]] = []
         for stream in STREAMS:                      # 逐流：加载 → 写盘 → 释放，峰值内存只有一个 stream
-            frame, receipt = _load_stream(stream, csvs[stream])
+            frame, receipt, empty_here = _load_stream(stream, csvs[stream])
+            empty += [(symbol, stream) for symbol in empty_here]
             target = root / parquet_relpath(stream, day)
             _write_stream(target, frame)
             del frame
@@ -104,12 +111,73 @@ def ingest(
                 receipt.stream, receipt.n_symbols, receipt.n_rows_csv, receipt.n_rows_parquet, receipt.header,
                 target.stat().st_size, _sha256_file(target), receipt.sha256_csv,
             ))
-        receipt = IngestReceipt(day, archive, archive_sha, tuple(prefixes), _sevenzip_version(), tuple(receipts), dropped, quote_only)
+        receipt = IngestReceipt(day, archive, archive_sha, tuple(prefixes), _sevenzip_version(), tuple(receipts), dropped, quote_only,
+                                tuple(sorted(empty)))
         _write_manifest(manifest, receipt)
         return receipt
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
         lock.unlink(missing_ok=True)
+
+
+# ----------------------------------------------------------------- 批量驱动
+
+
+@dataclass(frozen=True)
+class DayOutcome:
+    day: dt.date
+    archive: Path
+    status: str                    # ok | failed | stopped_disk
+    elapsed_s: float
+    receipt: IngestReceipt | None = None
+    error: str = ""
+
+
+@dataclass(frozen=True)
+class BatchOutcome:
+    outcomes: tuple[DayOutcome, ...]
+    skipped: tuple[tuple[Path, str], ...]    # 非规范文件名等：登记，不静默（tools 层据此非零退出）
+
+    @property
+    def ok(self) -> bool:
+        return not self.skipped and all(o.status == "ok" for o in self.outcomes)
+
+
+def ingest_days(archives: Sequence[Path], root: Path, *, scratch_parent: Path, min_free_bytes: int, min_free_pct: float,
+                stop_on_error: bool = True) -> BatchOutcome:
+    """批量摄取驱动（V1 j1_backfill 的替代，判据在这里不在 tools）：
+    - 只接受规范文件名 YYYYMMDD.7z（schema.archive_day）；重复件 `(1).7z`、半成品 `.downloading` 记入 skipped，不静默；
+    - 每天开始前检查 scratch 与 root 所在卷的剩余空间（绝对字节 + 百分比双阈值），不足即 stopped_disk 并停止；
+    - 单天失败：stop_on_error 时停止（默认），否则记 failed 继续；幂等由 ingest() 保证。"""
+    skipped: list[tuple[Path, str]] = []
+    outcomes: list[DayOutcome] = []
+    for archive in archives:
+        day = archive_day(archive.name)
+        if day is None:
+            skipped.append((archive, "非规范文件名（重复件 / 半成品 / 非 YYYYMMDD.7z）"))
+            continue
+        low = _low_disk(scratch_parent, min_free_bytes, min_free_pct) or _low_disk(root, min_free_bytes, min_free_pct)
+        if low:
+            outcomes.append(DayOutcome(day, archive, "stopped_disk", 0.0, error=low))
+            break
+        t0 = time.time()
+        try:
+            receipt = ingest(day, archive, root, scratch_parent=scratch_parent)
+            outcomes.append(DayOutcome(day, archive, "ok", round(time.time() - t0, 1), receipt))
+        except Exception as exc:  # noqa: BLE001 — 驱动层：记录后按策略停止或继续，不吞
+            outcomes.append(DayOutcome(day, archive, "failed", round(time.time() - t0, 1), error=f"{type(exc).__name__}: {exc}"))
+            if stop_on_error:
+                break
+    return BatchOutcome(tuple(outcomes), tuple(skipped))
+
+
+def _low_disk(path: Path, min_free_bytes: int, min_free_pct: float) -> str:
+    path.mkdir(parents=True, exist_ok=True)
+    usage = shutil.disk_usage(path)
+    pct = usage.free / usage.total * 100
+    if usage.free < min_free_bytes or pct < min_free_pct:
+        return f"{path} 剩余 {usage.free / 1e9:.1f} GB（{pct:.1f}%），低于下限 {min_free_bytes / 1e9:.1f} GB / {min_free_pct}%"
+    return ""
 
 
 # ----------------------------------------------------------------- manifest / 哈希
@@ -122,7 +190,7 @@ def _load_manifest(path: Path) -> IngestReceipt | None:
     return IngestReceipt(
         dt.date.fromisoformat(data["day"]), Path(data["archive"]), data["archive_sha256"], tuple(data["prefixes"]),
         data["sevenzip_version"], tuple(StreamReceipt(**row) for row in data["streams"]), dict(data["dropped_by_prefix"]),
-        tuple(data["quote_only_symbols"]),
+        tuple(data["quote_only_symbols"]), tuple((s, st) for s, st in data["empty_files"]),
     )
 
 
@@ -133,6 +201,7 @@ def _write_manifest(path: Path, receipt: IngestReceipt) -> None:
         "archive_sha256": receipt.archive_sha256, "prefixes": list(receipt.prefixes),
         "sevenzip_version": receipt.sevenzip_version, "streams": [asdict(s) for s in receipt.streams],
         "dropped_by_prefix": receipt.dropped_by_prefix, "quote_only_symbols": list(receipt.quote_only_symbols),
+        "empty_files": [list(pair) for pair in receipt.empty_files],
     }
     _atomic_write(path, lambda tmp: tmp.write_text(json.dumps(data, ensure_ascii=False, sort_keys=True), encoding="utf-8"))
 
@@ -264,16 +333,23 @@ def _discover_csvs(
     return by_stream, dropped, tuple(quote_only)
 
 
-def _load_stream(stream: Stream, csvs: list[tuple[str, Path]]) -> tuple[pl.DataFrame, StreamReceipt]:
+def _load_stream(stream: Stream, csvs: list[tuple[str, Path]]) -> tuple[pl.DataFrame, StreamReceipt, tuple[str, ...]]:
+    """返回 (合并帧, 收据, 0 字节文件的标的)。0 字节 = 该标的该 stream 无数据（登记，不静默）；有字节无表头仍硬失败。"""
     frames: list[pl.DataFrame] = []
     digest = hashlib.sha256()
     header_text = ""
     n_rows_csv = 0
+    n_symbols = 0
+    empty: list[str] = []
     for symbol, path in csvs:                      # 已按标的升序
         data = path.read_bytes()                   # 只读一次盘：表头、计数、哈希、解析都从这份字节来
+        if not data:
+            empty.append(symbol)
+            continue
+        n_symbols += 1
         newline = data.find(b"\n")
-        if not data or newline < 0 and not data.strip():
-            raise RuntimeError(f"CSV 为空或没有表头：{path}")
+        if newline < 0 and not data.strip():
+            raise RuntimeError(f"CSV 没有表头：{path}")
         header_bytes = (data if newline < 0 else data[:newline]).rstrip(b"\r")
         body = b"" if newline < 0 else data[newline + 1:]
         if not body.isascii():
@@ -291,8 +367,10 @@ def _load_stream(stream: Stream, csvs: list[tuple[str, Path]]) -> tuple[pl.DataF
         if frame.height != n_rows:
             raise RuntimeError(f"CSV 行数不符：{path}（独立计数 {n_rows}，解析得 {frame.height}）")
         frames.append(frame)
+    if not frames:
+        raise RuntimeError(f"{stream} 的全部 CSV 都是 0 字节，整流无数据")
     combined = pl.concat(frames, how="vertical")
-    return combined, StreamReceipt(stream, len(csvs), n_rows_csv, combined.height, header_text, 0, "", digest.hexdigest())
+    return combined, StreamReceipt(stream, n_symbols, n_rows_csv, combined.height, header_text, 0, "", digest.hexdigest()), tuple(empty)
 
 
 def _parse_body(body: bytes, symbol: str, ncols: int, n_rows: int) -> pl.DataFrame:

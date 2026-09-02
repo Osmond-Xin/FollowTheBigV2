@@ -11,6 +11,7 @@ run "ruff（复杂度 / 私有属性 / 死注释）" uv run ruff check src tests
 run "import-linter（分层方向 / 纯逻辑核禁 IO）" uv run lint-imports
 run "私有符号跨模块 import" uv run python tools/check_private_imports.py src
 run "缺陷与形状账本（结构 / 枚举相等 / 语义 append-only；基线 = merge-base HEAD origin/main，不可覆盖）" uv run python tools/check_ledger.py
+run "入口门禁（可执行入口只能在 tools/ 且登记；无 scripts/）" uv run python tools/check_entrypoints.py
 run "词汇（grep 找候选 → 语义判定，无豁免名单）" uv run python tools/check_vocab.py
 run "pytest + 覆盖率" uv run pytest --cov=ftbv2 --cov-report=xml --cov-report=term
 echo; echo "全部门禁通过"

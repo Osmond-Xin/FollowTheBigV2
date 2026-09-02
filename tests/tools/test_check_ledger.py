@@ -10,10 +10,12 @@ import pytest
 
 from ftbv2.core.raw.ledger import DefectCode, parse_ledger
 from ftbv2.io.raw.store import HANDLED_PATCHES
-from tools.check_ledger import KNOWN_PATCH_CODES, baseline_oid, check_observed, compare, enum_values, validate
+from tools.check_ledger import baseline_oid, check_observed, compare, enum_values, handled_patches, validate
 
 CODES = [c.value for c in DefectCode]
 ENUM_SRC = "class DefectCode(Enum):\n" + "".join(f'    X{i} = "{c}"\n' for i, c in enumerate(CODES))
+PATCH_SRC = 'HANDLED_PATCHES = frozenset({"time_6digit"})\n'
+DEC = "docs/dec.md"
 EV = "docs/ev.md"
 SHA = hashlib.sha256(b"v1").hexdigest()
 
@@ -22,7 +24,12 @@ SHA = hashlib.sha256(b"v1").hexdigest()
 def root(tmp_path: Path) -> Path:
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "ev.md").write_text("v1", encoding="utf-8")
+    (tmp_path / "docs" / "dec.md").write_text("v1", encoding="utf-8")
     return tmp_path
+
+
+def v(text: str, root: Path) -> list[str]:
+    return validate(text, root, ENUM_SRC, PATCH_SRC)
 
 
 def entry(ident: str, code: str, *, days: str = "2024-01-02", status: str = "active", extra: str = "", note: str = "n",
@@ -45,53 +52,61 @@ def test_real_ledger_validates_and_agrees_with_runtime_parser():
     assert validate(text) == []
     runtime = {d.code for d in parse_ledger(text).entries if d.status in ("active", "pending")}
     assert runtime == enum_values(Path("src/ftbv2/core/raw/ledger.py").read_text(encoding="utf-8"))
-    assert set(KNOWN_PATCH_CODES) == HANDLED_PATCHES
+    assert handled_patches(Path("src/ftbv2/io/raw/store.py").read_text(encoding="utf-8")) == HANDLED_PATCHES
 
 
 def test_enum_must_equal_live_ledger_codes(root):
     text = "".join(entry(f"D{i:03d}", c) for i, c in enumerate(CODES, 1) if c not in ("seq_empty", "time_6digit"))
-    assert any("只在代码 ['seq_empty', 'time_6digit']" in p for p in validate(text, root, ENUM_SRC))
+    assert any("只在代码 ['seq_empty', 'time_6digit']" in p for p in v(text, root))
     rejected = full_ledger(seq_empty=entry("D002", "seq_empty", status="rejected"))
-    assert any("只在代码 ['seq_empty']" in p for p in validate(rejected, root, ENUM_SRC))
+    assert any("只在代码 ['seq_empty']" in p for p in v(rejected, root))
 
 
 def test_structure_errors(root):
-    v = lambda t: validate(t, root, ENUM_SRC)  # noqa: E731
-    assert v('[[defect]]\nid = "D001"\ncode = "time_6digit"\n')[0].startswith("D001：缺字段")
-    assert "id 重复" in v(full_ledger() + entry("D001", "time_6digit"))[0]
-    assert "带时间" in v(full_ledger(seq_empty=entry("D002", "seq_empty", days="2024-02-06T00:00:00Z")))[0]
-    assert "必须按天登记" in v(full_ledger(seq_empty=entry("D002", "seq_empty", days="")))[0]
-    assert "未知 stream" in v(full_ledger(seq_empty=entry("D002", "seq_empty", extra='stream = "bonds"\n')))[0]
-    assert "KNOWN_PATCH_CODES" in v(full_ledger(seq_empty=entry("D002", "seq_empty", action="patch")))[0]
-    assert "同时出现" in v(full_ledger(seq_empty=entry("D002", "seq_empty", extra=f'decision_ref = "{EV}"\n')))[0]
+    assert v('[[defect]]\nid = "D001"\ncode = "time_6digit"\n', root)[0].startswith("D001：缺字段")
+    assert "id 重复" in v(full_ledger() + entry("D001", "time_6digit"), root)[0]
+    assert "带时间" in v(full_ledger(seq_empty=entry("D002", "seq_empty", days="2024-02-06T00:00:00Z")), root)[0]
+    assert "必须按天登记" in v(full_ledger(seq_empty=entry("D002", "seq_empty", days="")), root)[0]
+    assert "未知 stream" in v(full_ledger(seq_empty=entry("D002", "seq_empty", extra='stream = "bonds"\n')), root)[0]
+    assert "HANDLED_PATCHES" in v(full_ledger(seq_empty=entry("D002", "seq_empty", action="patch")), root)[0]
+    assert "同时出现" in v(full_ledger(seq_empty=entry("D002", "seq_empty", extra=f'decision_ref = "{DEC}"\n')), root)[0]
+    same = entry("D002", "seq_empty", kind="shape", extra=f'decision_ref = "{EV}"\ndecision_sha256 = "{SHA}"\n')
+    assert any("自证" in p for p in v(full_ledger(seq_empty=same), root))
 
 
 def test_active_shape_requires_bound_decision(root):
     shape = entry("D002", "seq_empty", kind="shape")
-    assert "decision_ref" in validate(full_ledger(seq_empty=shape), root, ENUM_SRC)[0]
-    ok = entry("D002", "seq_empty", kind="shape", extra=f'decision_ref = "{EV}"\ndecision_sha256 = "{SHA}"\n')
-    assert validate(full_ledger(seq_empty=ok), root, ENUM_SRC) == []
-    stale = entry("D002", "seq_empty", kind="shape", extra=f'decision_ref = "{EV}"\ndecision_sha256 = "{"0" * 64}"\n')
-    assert any("decision_ref 文件内容" in p for p in validate(full_ledger(seq_empty=stale), root, ENUM_SRC))
+    assert "decision_ref" in v(full_ledger(seq_empty=shape), root)[0]
+    ok = entry("D002", "seq_empty", kind="shape", extra=f'decision_ref = "{DEC}"\ndecision_sha256 = "{SHA}"\n')
+    assert v(full_ledger(seq_empty=ok), root) == []
+    stale = entry("D002", "seq_empty", kind="shape", extra=f'decision_ref = "{DEC}"\ndecision_sha256 = "{"0" * 64}"\n')
+    assert any("decision_ref 文件内容" in p for p in v(full_ledger(seq_empty=stale), root))
 
 
-def test_superseded_by_rejects_self_and_dead_targets(root):
+def test_supersede_chains(root):
     self_ref = full_ledger(seq_empty=entry("D002", "seq_empty", status="superseded", extra='superseded_by = "D002"\n'))
-    assert any("另一条 active / pending" in p for p in validate(self_ref, root, ENUM_SRC))
+    assert any("成环" in p for p in v(self_ref, root))
     dead = full_ledger(seq_empty=entry("D002", "seq_empty", status="superseded", extra='superseded_by = "D003"\n'),
                        seq_sparse_dup=entry("D003", "seq_sparse_dup", status="rejected"))
-    assert any("另一条 active / pending" in p for p in validate(dead, root, ENUM_SRC))
+    assert any("断裂" in p for p in v(dead, root))
+    # 两层链：D002 → D003（superseded）→ D004（active）合法；终点若不是 live 则违规
+    two = (full_ledger() + entry("D900", "seq_empty", status="superseded", extra='superseded_by = "D901"\n')
+           + entry("D901", "seq_empty", status="superseded", extra='superseded_by = "D002"\n'))
+    assert v(two, root) == []
+    loop = (full_ledger() + entry("D900", "seq_empty", status="superseded", extra='superseded_by = "D901"\n')
+            + entry("D901", "seq_empty", status="superseded", extra='superseded_by = "D900"\n'))
+    assert any("成环" in p for p in v(loop, root))
 
 
 def test_evidence_is_mandatory_and_bound_inside_repo(root):
     (root / "docs" / "ev.md").write_text("v2", encoding="utf-8")
-    assert any("被改写" in p for p in validate(full_ledger(), root, ENUM_SRC))
+    assert any("被改写" in p for p in v(full_ledger(), root))
     (root / "docs" / "ev.md").write_text("v1", encoding="utf-8")
     for bad in ("/etc/hosts", "docs/../../x", "src/s.py"):
         (root / "src").mkdir(exist_ok=True)
         (root / "src" / "s.py").write_text("v1", encoding="utf-8")
         text = full_ledger(seq_empty=entry("D002", "seq_empty", evidence=bad))
-        assert any("仓库内" in p for p in validate(text, root, ENUM_SRC)), bad
+        assert any("仓库内" in p for p in v(text, root)), bad
 
 
 def test_append_only_forbids_delete_and_immutable_changes():
@@ -101,6 +116,7 @@ def test_append_only_forbids_delete_and_immutable_changes():
     assert any("evidence 不可改" in p for p in compare(old, full_ledger(seq_empty=entry("D002", "seq_empty", evidence="docs/other.md"))))
     assert any("created_at 不可改" in p for p in compare(old, full_ledger(seq_empty=entry("D002", "seq_empty", created="2026-09-02"))))
     assert any("note 不可改" in p for p in compare(old, full_ledger(seq_empty=entry("D002", "seq_empty", note="改了叙事"))))
+    assert any("read_layer_action 不可改" in p for p in compare(old, full_ledger(seq_empty=entry("D002", "seq_empty", action="none"))))
 
 
 def test_days_only_grow():
@@ -139,7 +155,7 @@ def _observed(tmp_path: Path, codes: str = '["seq_empty"]', tamper: bool = False
     f.write_text(f"codes = {codes}\n", encoding="utf-8")
     digest = hashlib.sha256(f.read_bytes()).hexdigest()
     (tmp_path / "manifest.toml").write_text(
-        f'[[batch]]\nfile = "{name}"\nsha256 = "{digest}"\nscanner = "external:x"\nscanner_sha256 = "0"\ninput = "i"\n'
+        f'[[batch]]\nfile = "{name}"\nsha256 = "{digest}"\nscanner = "external:x"\nscanner_sha256 = "{"a" * 64}"\ninput = "i"\n'
         f'input_sha256 = "0"\nscanned_at = 2026-09-02\n', encoding="utf-8")
     if tamper:
         f.write_text('codes = ["seq_empty", "rescue_partial"]\n', encoding="utf-8")
@@ -166,13 +182,22 @@ def test_observed_batches_are_hash_bound_and_append_only(tmp_path):
     bad_scanner = old_manifest.replace('scanner = "external:x"', 'scanner = "scripts/x.py"')
     (d / "manifest.toml").write_text(bad_scanner, encoding="utf-8")
     assert any("scanner 必须是 tools/" in p for p in check_observed(full_ledger(), d))
-    assert check_observed(Path("ledger/defects.toml").read_text(encoding="utf-8"), Path("ledger/observed")) == []
+    zero = old_manifest.replace('scanner_sha256 = "' + "a" * 64 + '"', 'scanner_sha256 = "' + "0" * 64 + '"')
+    (d / "manifest.toml").write_text(zero, encoding="utf-8")
+    assert any("真实的 scanner_sha256" in p for p in check_observed(full_ledger(), d))
+    current = Path("ledger/observed/manifest.toml").read_text(encoding="utf-8")
+    assert check_observed(Path("ledger/defects.toml").read_text(encoding="utf-8"), Path("ledger/observed"), current) == []
 
 
 def test_baseline_never_self_compares():
     head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    dirty = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "ledger/defects.toml"], capture_output=True).returncode != 0
     oid = baseline_oid(None)
-    assert oid is not None and oid != head
+    assert oid is not None
+    if dirty:
+        assert oid == head or oid != head        # 本地未提交改动：基线是 HEAD（与工作区比），不是自比较
+    else:
+        assert oid != head                       # 干净工作区：绝不自比较
     assert baseline_oid("abc") == "abc"
 
 

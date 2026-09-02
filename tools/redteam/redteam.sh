@@ -93,7 +93,7 @@ fan_out() {  # $1=对象文件  $2=模式说明  $3=输出目录  $4=文件名�
   local -a status=()
   for i in "${!pids[@]}"; do
     if wait "${pids[$i]}"; then status+=(0); else status+=(1); echo "  ✗ ${names[$i]} 执行失败"; BLOCK=1; fi
-    cp "$TMP/$(basename "${dests[$i]}").err" "${dests[$i]}.err" 2>/dev/null   # stderr 一律保留，空输出时靠它诊断
+    mkdir -p "$REPO/.redteam/stderr"; cp "$TMP/$(basename "${dests[$i]}").err" "$REPO/.redteam/stderr/$(basename "${dests[$i]}").err" 2>/dev/null   # stderr 一律保留到 .redteam/（不进 docs），空输出时靠它诊断
     rm -f "$REPO/.redteam/.prompt-${names[$i]}-$$.md"
   done
   echo; echo "== 裁决（只有「裁决：通过」放行；需改 / 不得合并 / 无裁决 / 执行失败一律阻断）："

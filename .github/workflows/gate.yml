@@ -22,7 +22,7 @@ jobs:
           python-version: "3.12"
 
       - name: 安装
-        run: uv sync --group dev
+        run: uv sync --locked --group dev
 
       # Ubuntu 的 7zip 包只给 7z/7za/7zr，没有 7zz；从官方发布页取，版本与 sha256 钉死
       - name: 安装 7zz（摄取测试需要；缺了会被 skip 而不是失败）

@@ -39,15 +39,19 @@ def _csv_rows(stream: str, symbol: str, n: int) -> list[str]:
     return rows
 
 
-def make_archive(tmp_path: Path, symbols: dict[str, int], only: dict[str, tuple[str, ...]] | None = None) -> Path:
+def make_archive(tmp_path: Path, symbols: dict[str, int], only: dict[str, tuple[str, ...]] | None = None,
+                 empty: dict[str, tuple[str, ...]] | None = None) -> Path:
     """symbols: 标的 → 每个 stream 的行数。布局 {day}/{symbol}/{csv}，表头 GBK。
-    only: 标的 → 只写这些 stream 的 CSV（造停牌心跳 / 残缺归档）。"""
+    only: 标的 → 只写这些 stream 的 CSV（造停牌心跳 / 残缺归档）。empty: 标的 → 这些 stream 的 CSV 写成 0 字节。"""
     src = tmp_path / "src" / f"{DAY:%Y%m%d}"
     for sym, n in symbols.items():
         d = src / sym
         d.mkdir(parents=True)
         for stream, name in CSV_NAME.items():
             if only and sym in only and stream not in only[sym]:
+                continue
+            if empty and sym in empty and stream in empty[sym]:
+                (d / name).write_bytes(b"")
                 continue
             body = "\n".join([HEADER[stream], *_csv_rows(stream, sym, n)]) + "\n"
             (d / name).write_bytes(body.encode("gbk"))
@@ -226,3 +230,40 @@ def test_store_reads_morning_rows_with_non_null_time(archive, root, ledger):
     req = ReadRequest("orders", (DAY,), ("time_ms",))
     res = store.execute(plan(req, store.catalog("orders", (DAY,)), ledger))
     assert res.frame["time_ms"].null_count() == 0 and res.frame.height == 6
+
+
+# ----------------------------------------------------------------- 0 字节 CSV（账本 D009 empty_file，2026-09-02 裁定登记进收据）
+
+
+def test_ingest_zero_byte_csv_is_recorded_not_silent(tmp_path, root, ledger):
+    """605222.SH 式：行情 0 字节、委托成交正常 ⇒ 记入 empty_files，该标的不进 xinqing、不计入其 n_symbols；manifest 往返。"""
+    archive = make_archive(tmp_path, {"600000.SH": 3, "605222.SH": 4}, empty={"605222.SH": ("xinqing",)})
+    r = ingest(DAY, archive, root)
+    assert r.empty_files == (("605222.SH", "xinqing"),)
+    by = {s.stream: s for s in r.streams}
+    assert by["xinqing"].n_symbols == 1 and by["xinqing"].n_rows_csv == 3
+    assert by["orders"].n_symbols == 2 and by["orders"].n_rows_csv == 7
+    assert json.loads((root / "manifest" / f"{DAY:%Y%m%d}.json").read_text(encoding="utf-8"))["empty_files"] == [["605222.SH", "xinqing"]]
+    assert ingest(DAY, archive, root) == r
+    store = RawStore(root, ledger)
+    req = ReadRequest("xinqing", (DAY,), ("last_price",), symbols=frozenset({"605222.SH"}))
+    res = store.execute(plan(req, store.catalog("xinqing", (DAY,)), ledger))
+    assert res.frame.height == 0 and [g.reason for g in res.gaps] == [GapReason.SYMBOL_ABSENT]
+
+
+def test_ingest_whole_stream_empty_still_fails(tmp_path, root, ledger):
+    """所有标的的某一流都是 0 字节 ⇒ 整流无数据，硬失败（不是「合法空天」）。"""
+    archive = make_archive(tmp_path, {"600000.SH": 3, "000001.SZ": 2}, empty={"600000.SH": ("trades",), "000001.SZ": ("trades",)})
+    with pytest.raises(RuntimeError, match="整流无数据"):
+        ingest(DAY, archive, root)
+    assert not (root / "manifest" / f"{DAY:%Y%m%d}.json").exists()
+
+
+def test_ingest_bytes_without_header_still_fails(tmp_path, root, ledger):
+    """有字节但只有空白、没有表头 ⇒ 仍是畸形，硬失败。"""
+    archive = make_archive(tmp_path, {"600000.SH": 3})
+    src = tmp_path / "src" / f"{DAY:%Y%m%d}" / "600000.SH"
+    (src / CSV_NAME["orders"]).write_bytes(b"   ")
+    subprocess.run(["7zz", "a", "-bso0", "-bsp0", "-y", str(archive), f"{DAY:%Y%m%d}"], cwd=src.parent.parent, check=True)
+    with pytest.raises(RuntimeError, match="没有表头"):
+        ingest(DAY, archive, root)
