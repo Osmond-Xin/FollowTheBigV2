@@ -621,7 +621,8 @@ def test_adv_ingest_dropped_by_prefix_excluded_from_manifest_and_canonical_hash(
     assert r.dropped_by_prefix == {"300": 1, "688": 1, "830": 1}
     for s in r.streams:
         assert s.n_symbols == 1
-        assert s.n_rows_parquet == 1
+        # 夹具只给了 orders 数据行，其余两个 stream 是只有表头的合法空 CSV（巩固时修正：原断言要求三流都有 1 行）
+        assert s.n_rows_parquet == (1 if s.stream == "orders" else 0)
 
     t = pl.read_parquet(root / "orders" / f"date={DAY:%Y%m%d}.parquet")
     assert t["_symbol"].unique().to_list() == ["000001.SZ"]
