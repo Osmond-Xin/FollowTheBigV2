@@ -1,0 +1,108 @@
+# 模块拓扑声明（工程管束 R5）。「架构图上没有的模块视为不存在」——这份文件就是那张图的机器可读形式；HTML 架构图的模块表由它渲染。
+# tools/check_architecture.py（自包含）：src 下每个包 ⊆ 声明；从 depends_on 生成 import-linter 契约并与 setup.cfg 的生成区块比对；
+# 跨模块 import 只能从模块顶层包取 __all__ 里的名字；禁 importlib / __import__ / sys.path 篡改。
+# 新模块：先在这里登记（含架构图名、归属、依赖），再写代码；否则门禁红。
+# 相对基线（merge-base）只许单调：不得删 [pure].forbidden、不得把 pure 降级成 io、name / package 不可改、
+# 给 implemented 模块新增 depends_on 必须带 deps_decision（design-log 里的裁决出处）。status = implemented | planned：planned 的模块只有名字与依赖，
+# src 里不得出现它的包（出现即须先把 status 改为 implemented 并补 package）。
+
+[pure]
+forbidden = ["ftbv2.io", "os", "pathlib", "io", "duckdb", "requests"]   # 纯逻辑核不得 import 的东西（polars 表达式允许）
+
+[[module]]
+name = "core.raw"
+status = "implemented"
+package = "ftbv2.core.raw"
+kind = "pure"
+diagram = "原始层存储与访问（纯核部分：schema 公理 · 类型 · 缺陷账本 · dtype 还原 · 扫描计划）"
+depends_on = []
+
+[[module]]
+name = "io.receipt"
+status = "implemented"
+package = "ftbv2.io.receipt"
+kind = "io"
+diagram = "收据（工程管束 R1：任何入库数字的血缘）"
+depends_on = []
+
+[[module]]
+name = "io.raw"
+status = "implemented"
+package = "ftbv2.io.raw"
+kind = "io"
+diagram = "摄取 · 原始层存储与访问（IO 部分）· 原始层审计"
+depends_on = ["core.raw", "io.receipt"]
+
+# ---- 架构图上已定义、尚未实现的模块（package 是预定位置；实现时改 status 并补 __all__）----
+
+[[module]]
+name = "io.events"
+status = "planned"
+package = "ftbv2.io.events"
+kind = "io"
+diagram = "事件提取 ★（单向流式扫原始层，只抽统计反常；同一趟产出日级参考层）"
+depends_on = ["core.raw", "core.registry", "io.raw", "io.derived", "io.receipt"]
+
+[[module]]
+name = "io.derived"
+status = "planned"
+package = "ftbv2.io.derived"
+kind = "io"
+diagram = "事件与因子存储（内容寻址 · 血缘 sidecar · 原子写）"
+depends_on = ["core.registry", "io.receipt"]
+
+[[module]]
+name = "io.runner"
+status = "planned"
+package = "ftbv2.io.runner"
+kind = "io"
+diagram = "验证执行器（取数 · 注入 · 证据包 · 陈旧检测）"
+depends_on = ["core.raw", "core.registry", "core.factor", "core.portfolio", "core.simulate", "core.adjudicate", "core.stats", "io.derived", "io.receipt"]
+
+[[module]]
+name = "core.registry"
+status = "planned"
+package = "ftbv2.core.registry"
+kind = "pure"
+diagram = "事件注册表（全部事件定义的唯一来源：字段 · 切割规则 · 提取参数 · 版本）"
+depends_on = []
+
+[[module]]
+name = "core.factor"
+status = "planned"
+package = "ftbv2.core.factor"
+kind = "pure"
+diagram = "因子 ★（状态机 step(状态, 事件) → (新状态, 值?)，含判断）"
+depends_on = ["core.registry"]
+
+[[module]]
+name = "core.portfolio"
+status = "planned"
+package = "ftbv2.core.portfolio"
+kind = "pure"
+diagram = "组合（权重和 · 单标的上限 · 换手上界）"
+depends_on = []
+
+[[module]]
+name = "core.simulate"
+status = "planned"
+package = "ftbv2.core.simulate"
+kind = "pure"
+diagram = "执行模拟（撮合 · 滑点 · 涨跌停 · 停牌 · 成交量约束）"
+depends_on = []
+
+[[module]]
+name = "core.adjudicate"
+status = "planned"
+package = "ftbv2.core.adjudicate"
+kind = "pure"
+diagram = "假设与裁决（预注册 append-only · episode 预算 · 三态 + 标签）"
+depends_on = ["core.stats"]
+
+[[module]]
+name = "core.stats"
+status = "planned"
+package = "ftbv2.core.stats"
+kind = "pure"
+diagram = "检验原语（经验置换检验 · 多重检验校正 · 共线性）"
+depends_on = []

@@ -10,6 +10,8 @@ import json
 import subprocess
 from pathlib import Path
 
+__all__ = ["sha256_file", "sha256_files", "source_state", "write_receipt"]
+
 
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
@@ -38,11 +40,13 @@ def source_state(tool: Path) -> dict[str, str]:
     tree = _git(tool.resolve().parent, "rev-parse", "HEAD^{tree}")
     if not top or not tree:
         raise RuntimeError("收据必须由 git 仓库内的工具写：拿不到仓库根或 HEAD tree")
-    dirty = bool(_git(Path(top), "status", "--porcelain", "--untracked-files=no"))
+    diff = _git(Path(top), "diff", "--binary", "HEAD")
     lock = Path(top) / "uv.lock"
     if not lock.is_file():
         raise RuntimeError("收据必须绑定 uv.lock，找不到")
-    return {"source_tree": tree, "source_dirty": str(dirty).lower(), "uv_lock_sha256": sha256_file(lock)}
+    return {"source_tree": tree, "source_dirty": str(bool(diff)).lower(),
+            "source_diff_sha256": hashlib.sha256(diff.encode("utf-8")).hexdigest() if diff else "",   # 脏树时绑定实际执行的改动
+            "uv_lock_sha256": sha256_file(lock)}
 
 
 def write_receipt(kind: str, tool: Path, args: dict[str, object], inputs: dict[str, str], outputs: dict[str, str],

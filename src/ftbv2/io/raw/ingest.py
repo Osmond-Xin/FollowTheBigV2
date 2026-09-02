@@ -42,11 +42,22 @@ from pathlib import Path
 import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
-
-from ftbv2.core.raw.schema import (
-    CSV_NAME, MAIN_PREFIXES, ROW_GROUP_ROWS, STREAMS, SYMBOL_COL, Stream, archive_day, manifest_relpath, parquet_relpath,
+from ftbv2.core.raw import (
+    CSV_NAME,
+    Day,
+    IngestReceipt,
+    MAIN_PREFIXES,
+    Quality,
+    ROW_GROUP_ROWS,
+    STREAMS,
+    SYMBOL_COL,
+    Stream,
+    StreamReceipt,
+    archive_day,
+    manifest_relpath,
+    parquet_relpath,
 )
-from ftbv2.core.raw.types import Day, IngestReceipt, Quality, StreamReceipt
+
 
 _STREAM_OF_CSV = {name: stream for stream, name in CSV_NAME.items()}
 _ARCHIVE_SYMBOL_RE = re.compile(r"^\d{6}\.[A-Z]{2,3}$")   # 归档里可能有 .BJ / 基金等，形状合法即可；宇宙由前缀决定

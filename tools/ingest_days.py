@@ -8,8 +8,8 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
-from ftbv2.io.raw.ingest import ingest_days
 from ftbv2.io.receipt import write_receipt
+from ftbv2.io.raw import ingest_days
 
 
 def main() -> int:
