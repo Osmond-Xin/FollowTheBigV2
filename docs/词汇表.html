@@ -294,6 +294,7 @@
       <div class="warn"><span class="h">这条规则的伤口来源</span>
         <p>V1 的 builder 在生成 <span class="m">sweep10</span> 时删掉涨跌停日，而 <span class="m">sweep10 ≥ 2</span> 就是庄板池的定义 ⇒ <strong>池的定义本身带盲区</strong>，而要找的正是「准备拉升的庄」。</p>
         <p>把宇宙定义关进 append-only 的预注册，这类事故在结构上不可能。</p></div>
+      <p><strong>唯一的显式例外</strong>：原始层摄取只存主板前缀（<span class="m">000/001/002/003/600/601/603/605</span>），与 V1 一致（Q15；2026-09-02 用户裁定）。被筛掉的标的按前缀计数进摄取收据。除此之外原始层不删任何行。</p>
     </div></article>
   </div>
 

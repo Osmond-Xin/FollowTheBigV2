@@ -60,13 +60,13 @@ def archive(tmp_path):
 def test_ingest_writes_preserve_layout_and_receipt(archive, root, ledger):
     r = ingest(DAY, archive, root)
     assert r.day == DAY and {s.stream for s in r.streams} == {"orders", "trades", "xinqing"}
-    assert r.symbols_by_exchange == {"SZ": 3, "SH": 1}                     # 全部保留，300001.SZ 没有被筛掉
+    assert r.dropped_by_prefix == {"300": 1} and r.prefixes == ("000", "001", "002", "003", "600", "601", "603", "605")
     assert len(r.archive_sha256) == 64 and r.sevenzip_version
     for s in r.streams:
-        assert s.n_symbols == 4 and s.n_rows_csv == s.n_rows_parquet == 10
+        assert s.n_symbols == 3 and s.n_rows_csv == s.n_rows_parquet == 6
         assert s.header == HEADER[s.stream]
         meta = pq.read_metadata(root / s.stream / f"date={DAY:%Y%m%d}.parquet")
-        assert meta.num_rows == 10
+        assert meta.num_rows == 6
     assert (root / "manifest" / f"{DAY:%Y%m%d}.json").exists()
 
 
@@ -80,7 +80,7 @@ def test_ingest_columns_are_column_n_large_string_plus_symbol(archive, root, led
 def test_ingest_sorted_by_symbol_and_row_order_kept(archive, root, ledger):
     ingest(DAY, archive, root)
     t = pl.read_parquet(root / "orders" / f"date={DAY:%Y%m%d}.parquet", columns=["_symbol", "column_4"])
-    assert t["_symbol"].to_list() == ["000001.SZ"] * 2 + ["000002.SZ"] + ["300001.SZ"] * 4 + ["600000.SH"] * 3
+    assert t["_symbol"].to_list() == ["000001.SZ"] * 2 + ["000002.SZ"] + ["600000.SH"] * 3
     assert t.filter(pl.col("_symbol") == "600000.SH")["column_4"].to_list() == ["093000000", "093001000", "093002000"]
 
 
@@ -118,6 +118,13 @@ def test_ingest_rejects_changed_archive_for_same_day(tmp_path, root, ledger):
     ingest(DAY, a1, root)
     with pytest.raises(RuntimeError, match="sha256|归档"):
         ingest(DAY, a2, root)
+
+
+def test_ingest_rejects_changed_prefixes_for_same_day(tmp_path, root, ledger):
+    a = make_archive(tmp_path, {"000001.SZ": 1, "300001.SZ": 1})
+    ingest(DAY, a, root)
+    with pytest.raises(RuntimeError, match="prefix|前缀"):
+        ingest(DAY, a, root, prefixes=("000", "300"))
 
 
 def test_ingest_rejects_path_traversal_entries(tmp_path, root, ledger):

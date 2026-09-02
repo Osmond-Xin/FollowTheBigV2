@@ -191,7 +191,8 @@ class StreamReceipt:
 class IngestReceipt:
     day: Day
     archive: Path
-    archive_sha256: str                     # 幂等判据的一部分：同一天换一个归档必须失败，不能静默返回旧 receipt
+    archive_sha256: str                     # 幂等判据的一部分：同一天换一个归档或换前缀集必须失败，不能静默返回旧 receipt
+    prefixes: tuple[str, ...]               # 摄取时的前缀筛选（Q15 显式例外）
     sevenzip_version: str
     streams: tuple[StreamReceipt, ...]      # 三个 stream 齐全才算完成
-    symbols_by_exchange: dict[str, int] = field(default_factory=dict)   # "SZ" / "SH" → 标的数，全部保留，没有筛选
+    dropped_by_prefix: dict[str, int] = field(default_factory=dict)   # 被筛掉的标的按前缀计数：丢弃是决策，不是静默
