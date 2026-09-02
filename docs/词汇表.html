@@ -295,6 +295,7 @@
         <p>V1 的 builder 在生成 <span class="m">sweep10</span> 时删掉涨跌停日，而 <span class="m">sweep10 ≥ 2</span> 就是庄板池的定义 ⇒ <strong>池的定义本身带盲区</strong>，而要找的正是「准备拉升的庄」。</p>
         <p>把宇宙定义关进 append-only 的预注册，这类事故在结构上不可能。</p></div>
       <p><strong>唯一的显式例外</strong>：原始层摄取只存主板前缀（<span class="m">000/001/002/003/600/601/603/605</span>），与 V1 一致（Q15；2026-09-02 用户裁定）。被筛掉的标的按前缀计数进摄取收据。除此之外原始层不删任何行。</p>
+      <p><strong>停牌心跳不是残缺归档</strong>：归档里每天约有 6 只主板标的的目录只有行情 CSV（每分钟一条、价格与十档全 0 的心跳快照），没有委托与成交（2026-09-02 实测 20220104 / 20220105，与 V1 manifest 的 xinqing 3134 / orders 3128 吻合）。摄取把它登记为合法形状：三 stream 分别计标的，这些标的记入收据 <span class="m">quote_only_symbols</span>；只缺委托、成交之一，或缺行情，仍是残缺归档硬失败。「停牌」的判定属于日级参考层，摄取不猜。</p>
     </div></article>
   </div>
 
@@ -375,7 +376,7 @@
   <p style="margin-bottom:14px">以下条目<strong>不得在代码中使用</strong>。</p>
   <div class="pend">
     <div class="pend-i"><span class="d">01</span><p>假设作为形式对象的确切结构——验证体系吃什么、吐什么。</p></div>
-    <div class="pend-i"><span class="d">02</span><p>存储引擎、格式与压缩方案。方向已定：<strong>先改读取代码</strong>（零迁移拿到 43.8× / 25×）；重编码若做，必须含 <span class="m">DELTA_BINARY_PACKED</span>——只改 dtype 不加 delta 会让文件<strong>变大 7–25%</strong>。</p></div>
+    <div class="pend-i"><span class="d">02</span><p>存储引擎、格式与压缩方案。方向已定：<strong>先改读取代码</strong>（零迁移拿到 row group 裁剪 68.7×；pre_buffer 只在争用时救命，2026-09-02 复测）；重编码若做，必须含 <span class="m">DELTA_BINARY_PACKED</span>——只改 dtype 不加 delta 会让文件<strong>变大 7–25%</strong>。</p></div>
     <div class="pend-i"><span class="d">03</span><p><strong>事件的具体定义——事件注册表目前是空的。这是最大的一项待定。</strong>候选种子见数据表第五节。</p></div>
     <div class="pend-i"><span class="d">04</span><p>三个必须实测的数字：事件流实际体积 / 一次全量提取实际耗时 / 「宽而中性」能宽到什么程度。该次扫描须同时产出日级参考层，否则要补第二趟。</p></div>
     <div class="pend-i"><span class="d">05</span><p>污染级别的分级标度。</p></div>

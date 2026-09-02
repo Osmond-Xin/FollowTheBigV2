@@ -128,7 +128,7 @@
           <text x="224" y="114" text-anchor="middle" fill="var(--ink)" font-size="11">原始层 2.585 TB</text>
           <text x="534" y="114" text-anchor="middle" fill="var(--muted)" font-size="10.5">空闲 1.0 TB</text>
           <text x="636" y="108" fill="var(--io)" font-size="11.5">顺序 50–89 MB/s</text>
-          <text x="636" y="122" fill="var(--alarm)" font-size="11.5">随机 234 ms/op = 4 IOPS</text>
+          <text x="636" y="122" fill="var(--alarm)" font-size="11.5">随机 234 ms/op（盘被 V1 作业抢时；空闲 9.9 ms）</text>
 
           <!-- disk 3 -->
           <text x="0" y="156" font-size="12.5" fill="var(--ink)" font-weight="500">/Volumes/xin · HFS 外置</text>
@@ -181,7 +181,7 @@
     <li><strong>文件已全局按 <span class="m">_symbol</span> 排序，且 min/max statistics 完好</strong>。单股票查一天只需碰 680 个 row group 里的 <strong>2 个</strong>（2.6 MB / 792 MB，<strong>字节 338×</strong>）。</li>
     <li><span class="m">date=YYYYMMDD.parquet</span> 是<strong>普通文件名</strong>，不是 hive 分区目录——标准分区推断认不出，只能 glob + 字符串切片。</li>
     <li><span class="m">column_4</span>（时间）是字符串，statistics 按<strong>字典序</strong>：rg0 的 min/max 是 <span class="m">('100000040','95959440')</span>，<strong>min &gt; max</strong> ⇒ <strong>时间窗谓词无法下推</strong>。</li>
-    <li><span class="m">pre_buffer=True</span>：单列全文件扫描 231.9 s → 5.3 s（<strong>43.8×</strong>）。</li>
+    <li><span class="m">pre_buffer=True</span>：单列全文件扫描 231.9 s → 5.3 s（43.8×）——<strong>这是盘被 V1 作业抢时测的</strong>。2026-09-02 作业停后无争用复测：<span class="m">pre_buffer=False</span> 冷读同样只要 3.3 s，收益只在争用时出现；仍保持 <span class="m">pre_buffer=True</span>（无争用不亏）。单股 row group 裁剪复测 <strong>68.7×</strong>（0.09 s vs 全天 7 列 6.0 s）。全天单字段读 13.6 s 里 IO 只占一半，其余是 dtype 还原的 CPU——已改为 strip 物化一次、去正则、present 集合先 unique。</li>
     <li><span class="m">pl.read_parquet(use_pyarrow=True)</span> 实测 <strong>350 s</strong>，比现状慢 13 倍。<span class="m">pq.read_table</span> 9.4 s，跑满盘带宽。</li>
   </ul>
 
@@ -194,6 +194,7 @@
       <tr class="dim"><td>2023-01 → 2026-07</td><td class="n">约 866</td><td class="hit">已永久删除</td><td class="hit">只能验证 preserve 层自洽，<strong>永远无法证明「原始无损」</strong></td></tr>
     </tbody>
   </table></div>
+  <div class="rule"><p><strong>V2 摄取金标准（2026-09-02，2022-01-04 幸存 7z）</strong>：V2 <span class="m">ingest</span> 产物与 V1 preserve 三条流逐 row group、逐列、逐行比对——行数（102,454,526 / 85,718,829 / 13,035,997）、row group 数、schema、行序全部一致；<strong>唯一差异</strong>是 CSV 里整列为空的字段（orders <span class="m">column_11</span> · trades <span class="m">column_13</span> · xinqing <span class="m">column_10 / 11 / 67</span>）V1 存 null、V2 存空串。摄取 333 s/天，停牌心跳 6 只进 <span class="m">quote_only_symbols</span>。</p></div>
   <p class="note"><strong>转录可信，验收不可信。</strong>凡是能验的地方转录都是逐字节完美的（行数 36/36 精确、5 个完整文件逐字节相同、十档单调性约 5000 万行零违例、行序 = 原始序、价格量纲有外部锚点：20220104 ask1 最大值 ¥2068.59 与当日茅台盘中价相符）。但链上唯一的行数校验是<strong>同义反复</strong>（两边同源，必然相等），承诺的 round-trip diff 实现成了 <span class="m">10 == 10</span>，<span class="m">sha256</span> 从未被读回校验，<span class="m">self_check</span> 是<strong>零调用的死代码</strong>且给过假绿灯。</p>
 </section>
 
@@ -211,14 +212,14 @@
       <tr><td class="c">column_1</td><td>万得代码</td><td class="c">—</td><td><span class="m">002783.SZ</span> · <strong class="hit">前导零是代码的一部分，永不转数值</strong></td></tr>
       <tr class="dim"><td class="c">column_2</td><td>交易所代码</td><td class="c">—</td><td><span class="m">002783</span> · 从未被读</td></tr>
       <tr class="dim"><td class="c">column_3</td><td>自然日</td><td class="c">—</td><td><span class="m">20260803</span> · 从未被读</td></tr>
-      <tr><td class="c">column_4</td><td>时间</td><td class="c key">ORDER_TIME</td><td><span class="m">HHMMSSmmm</span> 九位无时区（交易所本地时 UTC+8），毫秒精度。<strong class="hit">某些天是 6 位 HHMMSS</strong>，见缺陷账本</td></tr>
+      <tr><td class="c">column_4</td><td>时间</td><td class="c key">ORDER_TIME</td><td><span class="m">HHMMSSmmm</span> 无时区（交易所本地时 UTC+8），毫秒精度；<strong>10 点前小时不足两位时省前导零成八位 <span class="m">HMMSSmmm</span></strong>（如 <span class="m">93000123</span>；每天约 28% 的行，2022-01-27 三条流实测），读取层按数值拆位、八位九位同一公式。<strong class="hit">某些天是 6 位 HHMMSS / 5 位 HMMSS</strong>，见缺陷账本</td></tr>
       <tr><td class="c">column_5</td><td>委托编号</td><td class="c hit">未登记</td><td class="hit">schema 不稳定：20240102 占 18.5% 字节，<strong>20240129 / 20240206 完全为空</strong></td></tr>
       <tr><td class="c">column_6</td><td>交易所委托号</td><td class="c key">ORDER_OID</td><td>int32 收窄实测无损</td></tr>
       <tr><td class="c">column_7</td><td>委托类型</td><td class="c key">ORDER_TYPE</td><td>SZ：<span class="m">0 / 1 / U</span>　SH：<span class="m">A</span>=新增 <span class="m">D</span>=删除。<strong class="hit">2025 起多出 <span class="m">' '</span> 和 <span class="m">S</span></strong>（产品状态订单，6784 行/天，price=0 vol=0，schema 漏登记）</td></tr>
       <tr><td class="c">column_8</td><td>委托代码</td><td class="c key">ORDER_SIDE</td><td><span class="m">B / S</span>。<strong class="hit">2025 起多出 <span class="m">' ' C I J O</span></strong>（各 1696 行/天）</td></tr>
       <tr><td class="c">column_9</td><td>委托价格</td><td class="c key">ORDER_PRICE</td><td>元 × 10000 整数定点（<span class="m">PRICE_SCALE = 10000</span>）</td></tr>
       <tr><td class="c">column_10</td><td>委托数量</td><td class="c key">ORDER_VOL</td><td>int32 收窄实测无损</td></tr>
-      <tr class="dim"><td class="c">column_11</td><td>（尾逗号幽灵列）</td><td class="c">—</td><td>恒 null · <strong>物理层面已死</strong></td></tr>
+      <tr class="dim"><td class="c">column_11</td><td>（尾逗号幽灵列）</td><td class="c">—</td><td>V1 preserve 恒 null；<strong>V2 摄取存空串 <span class="m">''</span></strong>（不发明 null，CSV 里是什么就是什么）· <strong>物理层面已死</strong></td></tr>
     </tbody>
   </table></div>
 
@@ -235,7 +236,7 @@
       <tr><td class="c">column_8</td><td>BS标志</td><td class="c key">TRADE_BS</td><td><span class="m">B / S</span>。<strong class="hit">SZ 撤单行是空格 <span class="m">' '</span></strong>（1873 万行/天）——schema 里声明的 <span class="m">SIDE_UNKNOWN = "U"</span> <strong>在数据里根本不存在</strong>，任何 <span class="m">== "U"</span> 的过滤静默命中 0 行</td></tr>
       <tr><td class="c">column_9 / 10</td><td>成交价格 / 成交数量</td><td class="c key">TRADE_PRICE / TRADE_VOL</td><td>价格同为元 × 10000 定点</td></tr>
       <tr><td class="c">column_11 / 12</td><td>叫卖序号 / 叫买序号</td><td class="c key">TRADE_ASK_REF / TRADE_BID_REF</td><td>指向 orders 的委托号 · int32 收窄无损</td></tr>
-      <tr class="dim"><td class="c">column_13</td><td>（尾逗号幽灵列）</td><td class="c">—</td><td>恒 null · 物理已死</td></tr>
+      <tr class="dim"><td class="c">column_13</td><td>（尾逗号幽灵列）</td><td class="c">—</td><td>V1 恒 null；V2 摄取存空串 <span class="m">''</span> · 物理已死</td></tr>
     </tbody>
   </table></div>
 
@@ -306,6 +307,12 @@
         <td class="hit">orders / trades <strong>标的集合不一致</strong> ⇒ 任何 <span class="m">orders ⋈ trades</span> 会遇到单边缺失。V1 的守卫是<strong>天级</strong>的，必须改成<strong>标的级</strong></td>
         <td class="c">两流成员数差</td>
         <td>20260805（差 1：orders 3138 / trades 3139）· 20260811（差 3：3180 / 3177）。这两天也是 manifest 里缺的那两天</td>
+      </tr>
+      <tr>
+        <td><strong>停牌心跳</strong><br><span class="note">合法形状，不是缺陷；2026-09-02 实测裁定</span></td>
+        <td>标的目录<strong>只有行情 CSV</strong>（每分钟一条、价格与十档全 0），无委托无成交 ⇒ 三 stream 标的数天然不等（V1 manifest：xinqing 3134 / orders 3128）。摄取放行并记入收据 <span class="m">quote_only_symbols</span>；只缺委托、成交之一，或缺行情，仍是残缺归档硬失败。「停牌」由日级参考层判定，摄取不猜</td>
+        <td class="c">标的目录里的 CSV 文件集合</td>
+        <td>20220104：000780 / 002323 / 002722 / 600072 / 603227 / 605090（主板 6，含非主板共 13）· 20220105：12。每天都有</td>
       </tr>
       <tr>
         <td><strong>NUL 哨兵</strong></td>
@@ -379,7 +386,7 @@
       <tr><td class="c">open · high · low · close</td><td>trades <span class="m">TRADE_PRICE</span>（元 × 10000 定点），含集合竞价的口径待定</td><td>可派生；口径待定</td></tr>
       <tr><td class="c">volume · amount</td><td>trades <span class="m">TRADE_VOL</span> × <span class="m">TRADE_PRICE</span>，只计 <span class="m">TRADE_CODE=='0'</span></td><td>可派生</td></tr>
       <tr><td class="c">limit_state</td><td>涨跌停价<strong>不在已登记列内</strong>（xinqing <span class="m">column_5–17</span> 有 25 列从未被读、未登记）；V1 用 <span class="m">FTB_KEEP_LOCKED</span> 判定的规则须从代码取回</td><td class="hit">来源列待登记；规则待定</td></tr>
-      <tr><td class="c">suspended</td><td>该日三 stream 均无该标的记录 ⇒ 停牌候选；须与缺口（缺陷账本）区分</td><td class="hit">判定规则待定</td></tr>
+      <tr><td class="c">suspended</td><td>该日行情只有心跳快照（价格与十档全 0）且委托、成交无该标的 ⇒ 停牌候选；直接来源是摄取收据 <span class="m">quote_only_symbols</span>（2026-09-02 实测：停牌股在 xinqing <strong>有</strong>心跳行，「三 stream 均无记录」的旧假设不成立）；须与缺口（缺陷账本）区分</td><td class="hit">来源已定，判定规则待写进代码</td></tr>
       <tr><td class="c">universe · st · listed_days</td><td>主板前缀（<span class="m">000/001/002/003/600/601/603/605</span>）可派生；ST 与上市日在 Level-2 三流里<strong>没有</strong>，需外部 PIT 来源</td><td class="hit">ST / 上市日无数据来源</td></tr>
     </tbody>
   </table></div>

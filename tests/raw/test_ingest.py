@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -13,7 +14,7 @@ import pytest
 
 from ftbv2.core.raw.plan import plan
 from ftbv2.core.raw.schema import CSV_NAME, ROW_GROUP_ROWS
-from ftbv2.core.raw.types import ReadRequest
+from ftbv2.core.raw.types import GapReason, ReadRequest
 from ftbv2.io.raw.ingest import ingest
 from ftbv2.io.raw.store import RawStore
 
@@ -38,13 +39,16 @@ def _csv_rows(stream: str, symbol: str, n: int) -> list[str]:
     return rows
 
 
-def make_archive(tmp_path: Path, symbols: dict[str, int]) -> Path:
-    """symbols: 标的 → 每个 stream 的行数。布局 {day}/{symbol}/{csv}，表头 GBK。"""
+def make_archive(tmp_path: Path, symbols: dict[str, int], only: dict[str, tuple[str, ...]] | None = None) -> Path:
+    """symbols: 标的 → 每个 stream 的行数。布局 {day}/{symbol}/{csv}，表头 GBK。
+    only: 标的 → 只写这些 stream 的 CSV（造停牌心跳 / 残缺归档）。"""
     src = tmp_path / "src" / f"{DAY:%Y%m%d}"
     for sym, n in symbols.items():
         d = src / sym
         d.mkdir(parents=True)
         for stream, name in CSV_NAME.items():
+            if only and sym in only and stream not in only[sym]:
+                continue
             body = "\n".join([HEADER[stream], *_csv_rows(stream, sym, n)]) + "\n"
             (d / name).write_bytes(body.encode("gbk"))
     archive = tmp_path / f"{DAY:%Y%m%d}.7z"
@@ -151,3 +155,74 @@ def test_ingest_is_idempotent_and_atomic(archive, root, ledger):
     assert r2 == r1 and f.stat().st_mtime_ns == mtime
     assert not list(root.rglob("*.tmp")) and not list(root.rglob("*.partial"))
     assert RawStore(root, ledger).days() == (DAY,)
+
+
+# ----------------------------------------------------------------- 停牌心跳（数据表第四节，2026-09-02 实测裁定）
+
+
+def test_ingest_quote_only_symbol_is_legal_and_recorded(tmp_path, root, ledger):
+    """标的目录只有行情.csv（停牌心跳）：合法，只进 xinqing，记入 quote_only_symbols；三 stream 的 n_symbols 因此不等；
+    manifest 往返后幂等返回的 receipt 带同样的字段。"""
+    archive = make_archive(tmp_path, {"600000.SH": 3, "000001.SZ": 2, "000780.SZ": 5}, only={"000780.SZ": ("xinqing",)})
+    r = ingest(DAY, archive, root)
+    assert r.quote_only_symbols == ("000780.SZ",)
+    by_stream = {s.stream: s for s in r.streams}
+    assert by_stream["xinqing"].n_symbols == 3 and by_stream["xinqing"].n_rows_csv == 10
+    assert by_stream["orders"].n_symbols == by_stream["trades"].n_symbols == 2
+    assert by_stream["orders"].n_rows_csv == by_stream["trades"].n_rows_csv == 5
+    manifest = json.loads((root / "manifest" / f"{DAY:%Y%m%d}.json").read_text(encoding="utf-8"))
+    assert manifest["quote_only_symbols"] == ["000780.SZ"]
+    assert ingest(DAY, archive, root) == r                      # 幂等路径从 manifest 重建，字段不丢
+
+
+def test_ingest_quote_only_symbol_reads_back_as_symbol_absent_gap(tmp_path, root, ledger):
+    """读取侧不变：请求停牌标的的 orders ⇒ SYMBOL_ABSENT 缺口，xinqing 里有它的行。"""
+    archive = make_archive(tmp_path, {"600000.SH": 3, "000780.SZ": 4}, only={"000780.SZ": ("xinqing",)})
+    ingest(DAY, archive, root)
+    store = RawStore(root, ledger)
+    req = ReadRequest("orders", (DAY,), ("price",), symbols=frozenset({"000780.SZ"}))
+    res = store.execute(plan(req, store.catalog("orders", (DAY,)), ledger))
+    assert res.frame.height == 0
+    assert [(g.reason, g.symbol) for g in res.gaps] == [(GapReason.SYMBOL_ABSENT, "000780.SZ")]
+    req = ReadRequest("xinqing", (DAY,), ("last_price",), symbols=frozenset({"000780.SZ"}))
+    res = store.execute(plan(req, store.catalog("xinqing", (DAY,)), ledger))
+    assert res.frame.height == 4 and res.gaps == ()
+
+
+def test_ingest_quote_only_symbol_outside_prefixes_is_dropped_not_recorded(tmp_path, root, ledger):
+    """前缀筛掉的停牌标的走 dropped_by_prefix，不进 quote_only_symbols。"""
+    archive = make_archive(tmp_path, {"600000.SH": 3, "300261.SZ": 4}, only={"300261.SZ": ("xinqing",)})
+    r = ingest(DAY, archive, root)
+    assert r.quote_only_symbols == () and r.dropped_by_prefix == {"300": 1}
+
+
+@pytest.mark.parametrize("present", [("orders", "trades"), ("xinqing", "trades"), ("orders",)])
+def test_ingest_other_partial_symbol_dirs_are_still_truncated_archives(tmp_path, root, ledger, present):
+    """缺行情、或只缺委托 / 成交之一、或只有委托：仍是残缺归档 ⇒ RuntimeError，不写 manifest。"""
+    archive = make_archive(tmp_path, {"600000.SH": 3, "000001.SZ": 2}, only={"000001.SZ": present})
+    with pytest.raises(RuntimeError, match="缺 stream CSV"):
+        ingest(DAY, archive, root)
+    assert not (root / "manifest" / f"{DAY:%Y%m%d}.json").exists()
+
+
+# ----------------------------------------------------------------- 八位时间（真实数据 2026-09-02 发现：早盘 10 点前省前导零，每天约 28% 的行）
+
+
+def test_eight_digit_morning_time_decodes_like_nine_digit():
+    """93000123 = 09:30:00.123 与 093000123 同值；100000040 / 95959440（数据表第二节 rg0 的 min/max 原文）；
+    五六位只在 allow_6digit 下解；带符号、七位、小数点 ⇒ null。"""
+    from ftbv2.core.raw.decode import to_time_ms
+    frame = pl.DataFrame({"t": ["93000123", "093000123", "100000040", "95959440", "84500", "093000", "+93000123", "9300012", "093000.12", ""]})
+    nine_only = frame.select(to_time_ms("t", allow_6digit=False).alias("v"))["v"].to_list()
+    assert nine_only == [34200123, 34200123, 36000040, 35999440, None, None, None, None, None, None]
+    with_short = frame.select(to_time_ms("t", allow_6digit=True).alias("v"))["v"].to_list()
+    assert with_short == [34200123, 34200123, 36000040, 35999440, 31500000, 34200000, None, None, None, None]
+
+
+def test_store_reads_morning_rows_with_non_null_time(archive, root, ledger):
+    """走完整链路：时间列经 RawStore 读回不是 null（夹具是九位；八位的等价性由上一条单元测试保证）。"""
+    ingest(DAY, archive, root)
+    store = RawStore(root, ledger)
+    req = ReadRequest("orders", (DAY,), ("time_ms",))
+    res = store.execute(plan(req, store.catalog("orders", (DAY,)), ledger))
+    assert res.frame["time_ms"].null_count() == 0 and res.frame.height == 6
