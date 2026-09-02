@@ -27,19 +27,70 @@ from ftbv2.core.raw.types import Window
 
 def to_int64(column: str) -> pl.Expr:
     """字符串列 → Int64，遵守模块 docstring 里的边界表。"""
-    raise NotImplementedError
+    raw = pl.col(column)
+    as_float = raw.cast(pl.Float64, strict=False)
+    candidate = as_float.cast(pl.Int64, strict=False)
+    exact_int = raw.cast(pl.Int64, strict=False)
+    integer_like = raw.str.contains(r"^[+-]?\d+$")
+    loses_integer_precision = integer_like & (exact_int.is_null() | (candidate != exact_int))
+    return pl.when(loses_integer_precision).then(None).otherwise(candidate)
 
 
 def to_time_ms(column: str, *, allow_6digit: bool) -> pl.Expr:
     """时间字符串列 → 自午夜起毫秒 Int64。allow_6digit=False 时六位值 → null（调用方须先检查并硬失败）。"""
-    raise NotImplementedError
+    raw = pl.col(column).str.strip_chars()
+    length = raw.str.len_chars()
+
+    def parse_ms(hour: pl.Expr, minute: pl.Expr, second: pl.Expr, millis: pl.Expr) -> pl.Expr:
+        valid = (
+            hour.is_between(0, 23)
+            & minute.is_between(0, 59)
+            & second.is_between(0, 59)
+            & millis.is_between(0, 999)
+        )
+        value = ((hour * 3600 + minute * 60 + second) * 1000 + millis).cast(pl.Int64)
+        return pl.when(valid).then(value).otherwise(None)
+
+    nine = parse_ms(
+        raw.str.slice(0, 2).cast(pl.Int64, strict=False),
+        raw.str.slice(2, 2).cast(pl.Int64, strict=False),
+        raw.str.slice(4, 2).cast(pl.Int64, strict=False),
+        raw.str.slice(6, 3).cast(pl.Int64, strict=False),
+    )
+    six = parse_ms(
+        raw.str.slice(0, 2).cast(pl.Int64, strict=False),
+        raw.str.slice(2, 2).cast(pl.Int64, strict=False),
+        raw.str.slice(4, 2).cast(pl.Int64, strict=False),
+        pl.lit(0),
+    )
+    five = parse_ms(
+        raw.str.slice(0, 1).cast(pl.Int64, strict=False),
+        raw.str.slice(1, 2).cast(pl.Int64, strict=False),
+        raw.str.slice(3, 2).cast(pl.Int64, strict=False),
+        pl.lit(0),
+    )
+    return (
+        pl.when(length == 9)
+        .then(nine)
+        .when((length == 6) & pl.lit(allow_6digit))
+        .then(six)
+        .when((length == 5) & pl.lit(allow_6digit))
+        .then(five)
+        .otherwise(None)
+    )
 
 
 def time_digit_lengths(column: str) -> pl.Expr:
     """该列去空白后的字符串长度集合（用于检测未登记的六位时间：长度 ≤ 7 即污染）。返回 List[UInt32] 或等价。"""
-    raise NotImplementedError
+    return pl.col(column).str.strip_chars().str.len_chars().drop_nulls().unique().sort()
 
 
 def in_windows(time_ms_column: str, windows: tuple[Window, ...]) -> pl.Expr:
     """time_ms 落在任一 [start_ms, end_ms) 内的布尔表达式。"""
-    raise NotImplementedError
+    expr = pl.lit(False)
+    for window in windows:
+        expr = expr | (
+            (pl.col(time_ms_column) >= window.start_ms)
+            & (pl.col(time_ms_column) < window.end_ms)
+        )
+    return expr

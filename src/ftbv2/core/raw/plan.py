@@ -22,4 +22,6 @@ def plan(request: ReadRequest, catalog: Catalog, ledger: DefectLedger) -> ScanPl
     - ScanPlan.ledger_sha256 = ledger.sha256；
     - 未登记字段名 ⇒ KeyError（来自 schema.field），不静默。
     """
-    raise NotImplementedError
+    from ftbv2.core.raw._plan_impl import make_plan
+
+    return make_plan(request, catalog, ledger)

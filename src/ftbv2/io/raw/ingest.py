@@ -36,4 +36,6 @@ def ingest(
     CSV：GBK 表头一行 + 纯 ASCII 数据行，所有字段按字符串原样保留（含 '\\x00'）。
     已完成（manifest 三 stream 齐全且 archive_sha256、prefixes 相同）的天直接返回既有 receipt，不重做。
     scratch_parent：临时解包目录的父目录（默认系统临时目录）；实际解包目录用 mkdtemp 私有创建。"""
-    raise NotImplementedError
+    from ftbv2.io.raw._ingest_impl import ingest_day
+
+    return ingest_day(day, archive, root, prefixes, scratch_parent)
