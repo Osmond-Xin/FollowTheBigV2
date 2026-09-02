@@ -194,6 +194,7 @@
       <tr class="dim"><td>2023-01 → 2026-07</td><td class="n">约 866</td><td class="hit">已永久删除</td><td class="hit">只能验证 preserve 层自洽，<strong>永远无法证明「原始无损」</strong></td></tr>
     </tbody>
   </table></div>
+  <div class="rule"><p><strong>V2 摄取金标准（2026-09-02，2022-01-04 幸存 7z）</strong>：V2 <span class="m">ingest</span> 产物与 V1 preserve 三条流逐 row group、逐列、逐行比对——行数（102,454,526 / 85,718,829 / 13,035,997）、row group 数、schema、行序全部一致；<strong>唯一差异</strong>是 CSV 里整列为空的字段（orders <span class="m">column_11</span> · trades <span class="m">column_13</span> · xinqing <span class="m">column_10 / 11 / 67</span>）V1 存 null、V2 存空串。摄取 333 s/天，停牌心跳 6 只进 <span class="m">quote_only_symbols</span>。</p></div>
   <p class="note"><strong>转录可信，验收不可信。</strong>凡是能验的地方转录都是逐字节完美的（行数 36/36 精确、5 个完整文件逐字节相同、十档单调性约 5000 万行零违例、行序 = 原始序、价格量纲有外部锚点：20220104 ask1 最大值 ¥2068.59 与当日茅台盘中价相符）。但链上唯一的行数校验是<strong>同义反复</strong>（两边同源，必然相等），承诺的 round-trip diff 实现成了 <span class="m">10 == 10</span>，<span class="m">sha256</span> 从未被读回校验，<span class="m">self_check</span> 是<strong>零调用的死代码</strong>且给过假绿灯。</p>
 </section>
 
@@ -218,7 +219,7 @@
       <tr><td class="c">column_8</td><td>委托代码</td><td class="c key">ORDER_SIDE</td><td><span class="m">B / S</span>。<strong class="hit">2025 起多出 <span class="m">' ' C I J O</span></strong>（各 1696 行/天）</td></tr>
       <tr><td class="c">column_9</td><td>委托价格</td><td class="c key">ORDER_PRICE</td><td>元 × 10000 整数定点（<span class="m">PRICE_SCALE = 10000</span>）</td></tr>
       <tr><td class="c">column_10</td><td>委托数量</td><td class="c key">ORDER_VOL</td><td>int32 收窄实测无损</td></tr>
-      <tr class="dim"><td class="c">column_11</td><td>（尾逗号幽灵列）</td><td class="c">—</td><td>恒 null · <strong>物理层面已死</strong></td></tr>
+      <tr class="dim"><td class="c">column_11</td><td>（尾逗号幽灵列）</td><td class="c">—</td><td>V1 preserve 恒 null；<strong>V2 摄取存空串 <span class="m">''</span></strong>（不发明 null，CSV 里是什么就是什么）· <strong>物理层面已死</strong></td></tr>
     </tbody>
   </table></div>
 
@@ -235,7 +236,7 @@
       <tr><td class="c">column_8</td><td>BS标志</td><td class="c key">TRADE_BS</td><td><span class="m">B / S</span>。<strong class="hit">SZ 撤单行是空格 <span class="m">' '</span></strong>（1873 万行/天）——schema 里声明的 <span class="m">SIDE_UNKNOWN = "U"</span> <strong>在数据里根本不存在</strong>，任何 <span class="m">== "U"</span> 的过滤静默命中 0 行</td></tr>
       <tr><td class="c">column_9 / 10</td><td>成交价格 / 成交数量</td><td class="c key">TRADE_PRICE / TRADE_VOL</td><td>价格同为元 × 10000 定点</td></tr>
       <tr><td class="c">column_11 / 12</td><td>叫卖序号 / 叫买序号</td><td class="c key">TRADE_ASK_REF / TRADE_BID_REF</td><td>指向 orders 的委托号 · int32 收窄无损</td></tr>
-      <tr class="dim"><td class="c">column_13</td><td>（尾逗号幽灵列）</td><td class="c">—</td><td>恒 null · 物理已死</td></tr>
+      <tr class="dim"><td class="c">column_13</td><td>（尾逗号幽灵列）</td><td class="c">—</td><td>V1 恒 null；V2 摄取存空串 <span class="m">''</span> · 物理已死</td></tr>
     </tbody>
   </table></div>
 
