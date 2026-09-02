@@ -25,6 +25,10 @@ class DefectCode(Enum):
     NUL_SENTINEL_SH = "nul_sentinel_sh"    # SH trades column_6/7 全为 '\x00'
 
 
+PATCH_CODES: frozenset[DefectCode] = frozenset({DefectCode.TIME_6DIGIT})
+"""读取时会改变解码行为的缺陷码。其余条目只登记事实（缺口归因时转述），不是补丁。"""
+
+
 @dataclass(frozen=True)
 class Defect:
     id: str                        # 稳定标识；账本 append-only：改一条 = 新增一条并 supersedes 旧 id（CI 门禁待建，纪律先立）
@@ -46,8 +50,17 @@ class DefectLedger:
             if (d.stream is None or d.stream == stream) and (not d.days or day in d.days)
         )
 
-    def has(self, day: dt.date, stream: Stream, code: DefectCode) -> bool:
-        return any(d.code == code for d in self.for_day(day, stream))
+    def day_scoped_codes(self, day: dt.date, stream: Stream) -> tuple[str, ...]:
+        """该天该 stream **按天登记**的缺陷码（不含结构性条目），去重保序。缺口归因用它。"""
+        out: list[str] = []
+        for d in self.for_day(day, stream):
+            if d.days and d.code.value not in out:
+                out.append(d.code.value)
+        return tuple(out)
+
+    def patches(self, day: dt.date, stream: Stream) -> tuple[str, ...]:
+        """该天该 stream 触发的补丁码（PATCH_CODES ∩ 按天登记）。"""
+        return tuple(c for c in self.day_scoped_codes(day, stream) if DefectCode(c) in PATCH_CODES)
 
 
 def parse_ledger(text: str) -> DefectLedger:

@@ -10,7 +10,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    import datetime as dt
 
 Stream = Literal["orders", "trades", "xinqing"]
 STREAMS: tuple[Stream, ...] = ("orders", "trades", "xinqing")
@@ -82,6 +85,15 @@ FIELDS: dict[Stream, tuple[Field, ...]] = {
         *_ob("ask_px", 18), *_ob("ask_sz", 28), *_ob("bid_px", 38), *_ob("bid_sz", 48),
     ),
 }
+
+def parquet_relpath(stream: Stream, day: "dt.date") -> str:
+    """{root} 下 preserve 文件的相对路径。布局是接口不变量，store 与 ingest 都从这里派生。"""
+    return f"{stream}/date={day:%Y%m%d}.parquet"
+
+
+def manifest_relpath(day: "dt.date") -> str:
+    return f"manifest/{day:%Y%m%d}.json"
+
 
 def field(stream: Stream, name: str) -> Field:
     """按语义名取字段；未登记名抛 KeyError（不是静默返回 None）。未登记列只能经 RawStore.inspect_raw 给人看。"""

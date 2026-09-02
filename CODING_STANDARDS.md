@@ -21,7 +21,7 @@
 - 行序 = 文件序；任何产物不得在未声明样本宇宙前删除行（摄取的前缀筛选是决策 Q15，并计数上报）。
 
 ## 读取路径
-- 只走 `pyarrow.parquet.read_table(..., pre_buffer=True)` → `polars.from_arrow`；禁止 `pl.read_parquet(use_pyarrow=True)`（慢 13 倍）。
+- 只走 pre_buffer=True 的 pyarrow 读（`ParquetFile(..., pre_buffer=True).read_row_groups` 或 `read_table(..., pre_buffer=True)`）→ `polars.from_arrow`；禁止 `pl.read_parquet(use_pyarrow=True)`（慢 13 倍）。
 - 按 `_symbol` 的 row group statistics 裁剪；时间窗永远不下推，只在扫描后过滤。
 - 读的字节数与 row group 数来自 footer 元数据并写进 `ReadStats`，让加速可观测。
 

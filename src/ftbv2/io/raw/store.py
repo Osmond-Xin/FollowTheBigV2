@@ -1,70 +1,185 @@
-"""原始层存储与访问（架构图模块表）。接口：catalog · execute · days · quality。plan() 是纯函数，在 core.raw.plan。
+"""原始层存储与访问（架构图模块表）。接口：catalog · execute · days · quality · inspect_raw。plan() 是纯函数，在 core.raw.plan。
 
 不变量：
-- root 未挂载 / 缺 stream 目录 ⇒ 构造时即 RuntimeError（fail-loud，F19）；绝不返回空结果假装没数据；
+- root 以 resolve(strict=True) 解析；未挂载 / 缺 stream 目录 ⇒ 构造时即 RuntimeError（fail-loud，F19），消息指出路径与 stream；
+  绝不返回空结果假装没数据；
 - 返回行序 = 文件序；
-- 只走 pyarrow `read_table(..., pre_buffer=True)`（单列全文件扫描 231.9 s → 5.3 s），再 `pl.from_arrow`；
+- 只走 pre_buffer=True 的 pyarrow 读（ParquetFile.read_row_groups / read_table），再 `pl.from_arrow`；
+  禁止 pl.read_parquet(use_pyarrow=True)（实测慢 13 倍）；
 - 未登记形状硬失败：账本未登记 time_6digit 的天出现六位时间 ⇒ RuntimeError 并指出天与 stream。
   只对本次投影实际读到的时间列检查（列裁剪不为此破例）；全字段的形状扫描是摄取与离线校验工具的职责；
+  stream 目录里不符合 date=YYYYMMDD.parquet 的文件同样硬失败；
 - 输出多日时以 day 列区分（time_ms 每天从午夜归零）；
-- root 以 resolve(strict=True) 解析；manifest 存在但损坏 ⇒ RuntimeError，不存在 ⇒ UNVERIFIED；
+- manifest 不存在 ⇒ UNVERIFIED；存在但损坏（非 JSON、非对象、缺 quality、值未登记）⇒ RuntimeError；
 - 接口上没有 force / ignore_missing / relax。
 """
 
 from __future__ import annotations
 
+import datetime as dt
+import json
 from pathlib import Path
-from typing import TYPE_CHECKING
 
+import polars as pl
+import pyarrow.parquet as pq
+
+from ftbv2.core.raw.decode import decode_field, in_windows, output_dtype, short_time_present
 from ftbv2.core.raw.ledger import DefectLedger
-from ftbv2.core.raw.schema import Stream
-from ftbv2.core.raw.types import Catalog, Day, Quality, ReadResult, ScanPlan
-
-if TYPE_CHECKING:
-    import polars as pl
+from ftbv2.core.raw.plan import attribute_gaps
+from ftbv2.core.raw.schema import STREAMS, SYMBOL_COL, Stream, field, manifest_relpath, parquet_relpath
+from ftbv2.core.raw.types import (
+    Catalog,
+    Day,
+    FileMeta,
+    FilePlan,
+    Quality,
+    ReadResult,
+    ReadStats,
+    RowGroupMeta,
+    ScanPlan,
+)
 
 
 class RawStore:
     """root 下的布局：{root}/{stream}/date=YYYYMMDD.parquet，{root}/manifest/YYYYMMDD.json（V2 摄取写）。"""
 
     def __init__(self, root: Path, ledger: DefectLedger) -> None:
-        from ftbv2.io.raw._store_impl import init
-
-        init(self, root, ledger)
+        try:
+            self._root = root.resolve(strict=True)
+        except FileNotFoundError as exc:
+            raise RuntimeError(f"原始层未挂载：{root}") from exc
+        for stream in STREAMS:
+            if not (self._root / stream).is_dir():
+                raise RuntimeError(f"原始层缺 stream 目录：{stream}（{self._root}）")
+        self._ledger = ledger
 
     def catalog(self, stream: Stream, days: tuple[Day, ...]) -> Catalog:
-        """只读 footer（每文件一次），不读数据。缺文件的天进 missing_days。"""
-        from ftbv2.io.raw._store_impl import catalog
-
-        return catalog(self, stream, days)
+        """只读 footer（每文件一次），不读数据。缺文件的天进 missing_days。空 row group 记为无区间（不会被选中）。"""
+        files, missing = [], []
+        for day in days:
+            path = self._root / parquet_relpath(stream, day)
+            if not path.exists():
+                missing.append(day)
+                continue
+            meta = pq.read_metadata(path)
+            columns = tuple(meta.schema.names)
+            symbol_index = columns.index(SYMBOL_COL)
+            row_groups = tuple(_row_group_meta(meta, i, symbol_index) for i in range(meta.num_row_groups))
+            files.append(FileMeta(path, stream, day, meta.num_rows, columns, row_groups))
+        return Catalog(stream, tuple(files), tuple(missing))
 
     def execute(self, plan: ScanPlan) -> ReadResult:
         """按计划读取：只读 plan.files 指定的 row group 与列；扫描后过滤；按 FilePlan.patches 逐文件解码；裁到 output_fields。
-        缺口归因只用本 stream 的事实与账本：天缺文件 → 该天只产生一条 DAY_MISSING，不再为每个请求标的展开 SYMBOL_ABSENT；
-        文件存在而请求的标的不在其中 → SYMBOL_ABSENT；时间窗过滤后为空不是缺口（标的在文件里）。
-        并把账本为该天该 stream 登记的缺陷码（如 rescue_partial）放进 Gap.defects——不偷读别的 stream。
-        stats 来自 FilePlan 里的 footer 元数据。"""
-        from ftbv2.io.raw._store_impl import execute
-
-        return execute(self, plan)
+        缺口归因见 core.raw.plan.attribute_gaps。stats 来自 FilePlan 里的 footer 元数据。"""
+        request = plan.request
+        time_column = field(request.stream, "time_ms").column
+        frames: list[pl.DataFrame] = []
+        present: dict[Day, frozenset[str]] = {}
+        for fp in plan.files:
+            raw = _read_row_groups(fp)
+            if time_column in raw.columns and "time_6digit" not in fp.patches and raw.select(short_time_present(time_column)).item():
+                raise RuntimeError(f"time_6digit 未登记：{fp.day:%Y-%m-%d} {request.stream} 出现六位时间")
+            present[fp.day] = frozenset(raw[SYMBOL_COL].drop_nulls().to_list())
+            frames.append(_decode(raw, fp, plan))
+        frame = pl.concat(frames, how="vertical") if frames else _empty_frame(plan)
+        gaps = attribute_gaps(request, frozenset(fp.day for fp in plan.files), present, self._ledger)
+        stats = ReadStats(
+            sum(fp.total_row_groups for fp in plan.files),
+            sum(len(fp.row_groups) for fp in plan.files),
+            sum(fp.total_bytes for fp in plan.files),
+            sum(rg.byte_size for fp in plan.files for rg in fp.row_groups),
+            frame.height,
+        )
+        return ReadResult(frame, gaps, stats)
 
     def inspect_raw(self, stream: Stream, day: Day, columns: tuple[str, ...],
                     symbols: frozenset[str] | None = None) -> pl.DataFrame:
         """给人看的旁路：按物理列名（column_N / _symbol）原样返回字符串，不经 schema、不经账本、不经计划。
         用于登记新列前的探查。因子与事件提取不得调用（import-linter 契约待加）。"""
-        from ftbv2.io.raw._store_impl import inspect_raw
-
-        return inspect_raw(self, stream, day, columns, symbols)
+        projection = list(columns)
+        if symbols is not None and SYMBOL_COL not in projection:
+            projection.append(SYMBOL_COL)
+        table = pq.read_table(self._root / parquet_relpath(stream, day), columns=projection, pre_buffer=True)
+        frame = pl.from_arrow(table)
+        if symbols is not None:
+            frame = frame.filter(pl.col(SYMBOL_COL).is_in(sorted(symbols)))
+        return frame.select(list(columns))
 
     def days(self, quality: Quality | None = None) -> tuple[Day, ...]:
         """三个 stream 都有文件的天，升序。quality 给定时过滤；无 manifest 的天算 UNVERIFIED，
         所以 day ∈ days(quality(day)) 对任何一天都成立。"""
-        from ftbv2.io.raw._store_impl import days
-
-        return days(self, quality)
+        common = set.intersection(*(_stream_days(self._root / s) for s in STREAMS))
+        ordered = tuple(sorted(common))
+        if quality is None:
+            return ordered
+        return tuple(d for d in ordered if self.quality(d) is quality)
 
     def quality(self, day: Day) -> Quality:
-        """manifest 里没有记录 ⇒ UNVERIFIED，不是异常。"""
-        from ftbv2.io.raw._store_impl import quality
+        """manifest 里没有记录 ⇒ UNVERIFIED，不是异常；存在但不可信 ⇒ RuntimeError。"""
+        path = self._root / manifest_relpath(day)
+        if not path.exists():
+            return Quality.UNVERIFIED
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return Quality(data["quality"])
+        except (json.JSONDecodeError, TypeError, KeyError, ValueError) as exc:
+            raise RuntimeError(f"manifest 损坏：{path}（{exc}）") from exc
 
-        return quality(self, day)
+
+def _row_group_meta(meta: pq.FileMetaData, index: int, symbol_index: int) -> RowGroupMeta:
+    group = meta.row_group(index)
+    stats = group.column(symbol_index).statistics
+    byte_size = sum(group.column(i).total_compressed_size for i in range(group.num_columns))
+    if group.num_rows == 0 or stats is None:
+        return RowGroupMeta(index, group.num_rows, byte_size, "", "")
+    return RowGroupMeta(index, group.num_rows, byte_size, stats.min, stats.max)
+
+
+def _read_row_groups(fp: FilePlan) -> pl.DataFrame:
+    if not fp.row_groups:
+        return pl.DataFrame({c: pl.Series(c, [], dtype=pl.String) for c in fp.columns})
+    table = pq.ParquetFile(fp.path, pre_buffer=True).read_row_groups(
+        [rg.index for rg in fp.row_groups], columns=list(fp.columns)
+    )
+    return pl.from_arrow(table)
+
+
+def _decode(raw: pl.DataFrame, fp: FilePlan, plan: ScanPlan) -> pl.DataFrame:
+    """物理列 → 语义列，扫描后过滤，裁到输出列。过滤所需的 time_ms 若不在输出里，最后被裁掉。"""
+    request = plan.request
+    allow_6digit = "time_6digit" in fp.patches
+    needed = list(plan.output_fields)
+    if request.windows is not None and "time_ms" not in needed:
+        needed.append("time_ms")
+    exprs = [pl.lit(fp.day).cast(pl.Date).alias("day"), pl.col(SYMBOL_COL).alias("symbol")]
+    exprs += [
+        decode_field(field(request.stream, name), allow_6digit=allow_6digit).alias(name)
+        for name in needed if name not in ("day", "symbol")
+    ]
+    frame = raw.with_columns(exprs)
+    if request.symbols is not None:
+        frame = frame.filter(pl.col("symbol").is_in(sorted(request.symbols)))
+    if request.windows is not None:
+        frame = frame.filter(in_windows("time_ms", request.windows))
+    return frame.select(list(plan.output_fields))
+
+
+def _empty_frame(plan: ScanPlan) -> pl.DataFrame:
+    stream = plan.request.stream
+    dtypes = {
+        name: pl.Date() if name == "day" else pl.String() if name == "symbol" else output_dtype(field(stream, name).kind)
+        for name in plan.output_fields
+    }
+    return pl.DataFrame({name: pl.Series(name, [], dtype=dtype) for name, dtype in dtypes.items()})
+
+
+def _stream_days(stream_dir: Path) -> set[dt.date]:
+    out: set[dt.date] = set()
+    for entry in stream_dir.iterdir():
+        if entry.name.startswith(".") or entry.name.endswith(".tmp"):
+            continue
+        try:
+            out.add(dt.datetime.strptime(entry.name, "date=%Y%m%d.parquet").date())
+        except ValueError as exc:
+            raise RuntimeError(f"原始层目录里有未登记形状的文件：{entry}") from exc
+    return out

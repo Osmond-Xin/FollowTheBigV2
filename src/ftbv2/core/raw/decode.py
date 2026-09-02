@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import polars as pl
 
+from ftbv2.core.raw.schema import Field, Kind
 from ftbv2.core.raw.types import Window
 
 
@@ -81,17 +82,31 @@ def to_time_ms(column: str, *, allow_6digit: bool) -> pl.Expr:
     )
 
 
-def time_digit_lengths(column: str) -> pl.Expr:
-    """该列去空白后的字符串长度集合（用于检测未登记的六位时间：长度 ≤ 7 即污染）。返回 List[UInt32] 或等价。"""
-    return pl.col(column).str.strip_chars().str.len_chars().drop_nulls().unique().sort()
-
-
 def in_windows(time_ms_column: str, windows: tuple[Window, ...]) -> pl.Expr:
     """time_ms 落在任一 [start_ms, end_ms) 内的布尔表达式。"""
-    expr = pl.lit(False)
+    expr = pl.col(time_ms_column) < 0          # 逐行的恒假基底：空窗返回每行 False，不是一个标量
     for window in windows:
         expr = expr | (
             (pl.col(time_ms_column) >= window.start_ms)
             & (pl.col(time_ms_column) < window.end_ms)
         )
     return expr
+
+
+def short_time_present(column: str) -> pl.Expr:
+    """去空白后长度 ≤ 7 的时间值是否存在（未登记 time_6digit 的天出现即硬失败）。"""
+    return (pl.col(column).str.strip_chars().str.len_chars() <= 7).fill_null(False).any()
+
+
+def decode_field(f: Field, *, allow_6digit: bool) -> pl.Expr:
+    """按 schema.Kind 把物理列还原成语义列（不含别名）。"""
+    if f.kind == "time":
+        return to_time_ms(f.column, allow_6digit=allow_6digit)
+    if f.kind in ("int", "price"):
+        return to_int64(f.column)
+    return pl.col(f.column)
+
+
+def output_dtype(kind: Kind) -> pl.DataType:
+    """语义列的输出 dtype：time / int / price → Int64，其余保持字符串。"""
+    return pl.Int64() if kind in ("time", "int", "price") else pl.String()

@@ -11,7 +11,7 @@ import polars as pl
 import pyarrow.parquet as pq
 import pytest
 
-from ftbv2.core.raw.decode import in_windows, time_digit_lengths, to_int64, to_time_ms
+from ftbv2.core.raw.decode import in_windows, to_int64, to_time_ms
 from ftbv2.core.raw.ledger import DefectCode, DefectLedger, parse_ledger
 from ftbv2.core.raw.plan import plan
 from ftbv2.core.raw.schema import CSV_NAME, MAIN_PREFIXES, ROW_GROUP_ROWS, STREAMS, field
@@ -238,7 +238,6 @@ def test_adv_plan_and_execute_symbol_spanning_consecutive_row_groups(root, ledge
     assert res.stats.row_groups_read == 2
     assert res.stats.row_groups_total == 3
     # 验证标的内部严格保留跨 row group 的文件原序
-    expected_oids = [i for i in range(20)] + [i for i in range(30)]   # 经 Int64 解码
     assert len(res.frame) == 50
     assert res.frame["symbol"].unique().to_list() == ["000002.SZ"]
 
@@ -595,8 +594,10 @@ def test_adv_ingest_row_count_with_embedded_commas_and_crlf(tmp_path, root, ledg
         '000001.SZ,000001,20220104,093002000,3,12,0,B,100000,300,',
     ]
     for s in STREAMS:
-        # 混入 CRLF 与末尾 3 个空行
-        body = "\r\n".join([HEADER[s], *order_lines]) + "\r\n\r\n\n\r\n"
+        # 混入 CRLF 与末尾 3 个空行；数据行按各 stream 的表头字段数补齐（巩固时修正：原夹具把 orders 形状塞进了三个 stream）
+        width = len(HEADER[s].split(","))
+        lines = [",".join((ln.split(",") + [""] * width)[:width]) for ln in order_lines]
+        body = "\r\n".join([HEADER[s], *lines]) + "\r\n\r\n\n\r\n"
         (src / CSV_NAME[s]).write_bytes(body.encode("gbk"))
 
     archive = tmp_path / f"{DAY:%Y%m%d}.7z"

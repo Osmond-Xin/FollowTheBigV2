@@ -65,6 +65,8 @@ class ReadRequest:
     def __post_init__(self) -> None:
         if not self.days:
             raise ValueError("days 不能为空")
+        if len(set(self.days)) != len(self.days):
+            raise ValueError("days 有重复：同一天会被读两次")
         if not self.fields:
             raise ValueError("fields 不能为空")
         if self.symbols is not None:
@@ -115,7 +117,7 @@ class FilePlan:
     columns: tuple[str, ...]                 # 物理投影，可能比输出多（过滤或补丁所需），返回前裁掉
     row_groups: tuple[RowGroupMeta, ...]     # 要读的 row group（未裁剪时 = 全部）
     pruned: bool                             # 是否按 _symbol statistics 裁剪过
-    patches: tuple[str, ...]                 # 缺陷账本为**这一天这个 stream** 触发的补丁代码，按文件隔离
+    patches: tuple[str, ...]                 # 缺陷账本为**这一天这个 stream** 触发的补丁码（ledger.PATCH_CODES ∩ 按天登记），按文件隔离
     total_row_groups: int
     total_bytes: int
 
@@ -141,7 +143,7 @@ class GapReason(Enum):
 @dataclass(frozen=True)
 class Gap:
     """缺口是一等公民，必须带归因码；它是下游纯核入口的必需参数，接口里没有 ignore_missing。
-    defects = 缺陷账本为该天该 stream 登记的缺陷码（如 rescue_partial）——只转述账本，不偷读别的 stream。"""
+    defects = 缺陷账本为该天该 stream **按天登记**的缺陷码（如 rescue_partial；结构性条目不算）——只转述账本，不偷读别的 stream。"""
 
     day: Day
     stream: Stream

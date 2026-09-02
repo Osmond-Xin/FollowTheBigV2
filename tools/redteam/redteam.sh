@@ -59,16 +59,16 @@ run_mmx() {  # $1=prompt  $2=输出
 import json, sys
 print(json.dumps([{"role": "user", "content": open(sys.argv[1], encoding="utf-8").read()}], ensure_ascii=False))
 PY
-  mmx text chat --messages-file "$1.json" --max-tokens 16000 --quiet > "$2" 2> "$2.err"
+  mmx text chat --messages-file "$1.json" --max-tokens 16000 --quiet > "$2" 2> "$TMP/$(basename "$2").err"
 }
 run_opencode() {  # agentic，plan agent 只读；提示词走 -f 附件（-f 是数组参数，message 必须在它前面）
-  opencode run --agent plan -m "$OPENCODE_MODEL" --dir "$REPO" "按附件文件里的要求执行审查。" -f "$1" > "$2" 2> "$2.err"
+  opencode run --agent plan -m "$OPENCODE_MODEL" --dir "$REPO" "按附件文件里的要求执行审查。" -f "$1" > "$2" 2> "$TMP/$(basename "$2").err"
 }
 run_agy() {  # agentic，plan 模式只读。agy 只接受 argv 提示词（stdin 与 -p='' 均实测不行），对象上限已限制 argv 长度
-  agy -p "$(cat "$1")" --effort high --print-timeout 25m --mode plan > "$2" 2> "$2.err"
+  agy -p "$(cat "$1")" --effort high --print-timeout 25m --mode plan > "$2" 2> "$TMP/$(basename "$2").err"
 }
 run_codex() {  # agentic，只读沙箱；stdin 必须显式喂（后台化时不可用）
-  codex exec --sandbox read-only --skip-git-repo-check -C "$REPO" -o "$2" - < "$1" > "$2.log" 2> "$2.err"
+  codex exec --sandbox read-only --skip-git-repo-check -C "$REPO" -o "$2" - < "$1" > "$TMP/$(basename "$2").log" 2> "$TMP/$(basename "$2").err"
 }
 
 sha() { shasum -a 256 "$1" | cut -c1-64; }
@@ -90,7 +90,7 @@ fan_out() {  # $1=对象文件  $2=模式说明  $3=输出目录  $4=文件名�
   BLOCK=0
   local -a status=()
   for i in "${!pids[@]}"; do
-    if wait "${pids[$i]}"; then status+=(0); else status+=(1); echo "  ✗ ${names[$i]} 执行失败（见 ${dests[$i]}.err）"; BLOCK=1; fi
+    if wait "${pids[$i]}"; then status+=(0); else status+=(1); echo "  ✗ ${names[$i]} 执行失败"; cp "$TMP/$(basename "${dests[$i]}").err" "${dests[$i]}.err" 2>/dev/null; BLOCK=1; fi
   done
   echo; echo "== 裁决（只有「裁决：通过」放行；需改 / 不得合并 / 无裁决 / 执行失败一律阻断）："
   local -a verdicts=()

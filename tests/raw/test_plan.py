@@ -102,7 +102,7 @@ def test_plan_patch_respects_ledger_stream_scope():
 
 def test_plan_unknown_field_raises(ledger):
     with pytest.raises(KeyError):
-        plan(request(fields=("feature_x",)), catalog(DAY), ledger)
+        plan(request(fields=("nonexistent_x",)), catalog(DAY), ledger)
     with pytest.raises(KeyError):
         plan(request(fields=("raw:column_5",)), catalog(DAY), ledger)      # 旁路不在读取路径上
 
