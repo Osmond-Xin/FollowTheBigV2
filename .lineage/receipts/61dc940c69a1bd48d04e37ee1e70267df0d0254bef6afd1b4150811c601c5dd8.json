@@ -1,0 +1,80 @@
+{
+ "args": {
+  "a": "/Volumes/辛的硬盘/data/preserve",
+  "b": "/Volumes/xin/FollowTheBigV2-raw",
+  "cmd": "compare",
+  "day": "2022-01-04"
+ },
+ "inputs": {
+  "a_files": "1e1a1ecd48c5626d2fb7d019d7b4dc97177b78dd983320c0d106b4f59cdbaa58",
+  "b_files": "44bc73d17c217d00c15bff89c2e1133c7197798ce7fd9edba12b92d17e8be516"
+ },
+ "kind": "audit_preserve.compare",
+ "outputs": {},
+ "receipt_id": "61dc940c69a1bd48d04e37ee1e70267df0d0254bef6afd1b4150811c601c5dd8",
+ "source_dirty": "false",
+ "source_tree": "9093ac4eae0edbbf70d7040935b6d680e765177c",
+ "summary": {
+  "day": "2022-01-04",
+  "identical_modulo_null": true,
+  "streams": [
+   {
+    "cells_differ": {},
+    "null_columns_a": {
+     "column_11": 102454526
+    },
+    "null_columns_b": {},
+    "row_groups": [
+     834,
+     834
+    ],
+    "rows": [
+     102454526,
+     102454526
+    ],
+    "schema_equal": true,
+    "stream": "orders"
+   },
+   {
+    "cells_differ": {},
+    "null_columns_a": {
+     "column_13": 85718829
+    },
+    "null_columns_b": {},
+    "row_groups": [
+     698,
+     698
+    ],
+    "rows": [
+     85718829,
+     85718829
+    ],
+    "schema_equal": true,
+    "stream": "trades"
+   },
+   {
+    "cells_differ": {},
+    "null_columns_a": {
+     "column_10": 13035997,
+     "column_11": 13035997,
+     "column_67": 13035997
+    },
+    "null_columns_b": {},
+    "row_groups": [
+     107,
+     107
+    ],
+    "rows": [
+     13035997,
+     13035997
+    ],
+    "schema_equal": true,
+    "stream": "xinqing"
+   }
+  ]
+ },
+ "tool": "audit_preserve.py",
+ "tool_sha256": "55c430b1837c30431f68b558ae78a8b3878e1aff7d7c68d226fb35f74f036f50",
+ "uv_lock_sha256": "d0c5d4bbb55593db06d8df0605d7b6ad85c35be1f5581d2d1444a69495894476",
+ "written_at": "2026-09-02T22:08:57+00:00"
+}

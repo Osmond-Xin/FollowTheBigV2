@@ -98,7 +98,7 @@ id = "D008"
 code = "quote_only"
 kind = "shape"
 stream = "xinqing"
-status = "pending"
+status = "rejected"
 created_at = 2026-09-02
 evidence = "ledger/evidence/D008.md"
 evidence_sha256 = "c608a573d48f50a65481702ae71f834d7987b2a2e872a50838fb68c8266c0334"
@@ -113,10 +113,12 @@ code = "empty_file"
 kind = "shape"
 stream = "xinqing"
 days = [2022-06-27]
-status = "pending"
+status = "active"
 created_at = 2026-09-02
 evidence = "ledger/evidence/D009.md"
 evidence_sha256 = "5a53deb68c8d158dd6821b2f9ba18d71e8b5d7418e22c5be5c7224cca7b21a4e"
+decision_ref = "ledger/evidence/D009-decision.md"
+decision_sha256 = "aa52c32d47348c1742be967c4aa070707205ed774fda1f2b351e51a026c2818d"
 read_layer_action = "none"
 note = '''0 字节 CSV（连表头都没有）：厂商导出缺陷，该股当天其他两流正常。2026-09-02 用户裁定：登记进收据 empty_files，该标的不进该 stream；V1 静默排除。pending 直到收据字段 IngestReceipt.empty_files 落地（工程管束第 2 步），届时转 active 并写 decision_ref。stream = 已观测到的流；新观测加 days'''
 
@@ -136,10 +138,12 @@ days = [
   2026-04-21, 2026-04-22, 2026-04-23, 2026-04-24, 2026-04-27, 2026-04-28,
   2026-04-29, 2026-04-30,
 ]
-status = "pending"
+status = "active"
 created_at = 2026-09-02
 evidence = "ledger/evidence/D010.md"
 evidence_sha256 = "4f8e7d97ce255e4b118ffc392c91af902cd90a1218a58b23216c2d23d5ef6b5f"
+decision_ref = "ledger/evidence/D010-decision.md"
+decision_sha256 = "48b29ffcd4fa04c1b3f64b59f5d86c9780c81a08d9c22cc4dd766412ab12fb48"
 read_layer_action = "none"
 note = '''三条流各少尾逗号幽灵列，语义未错位；枚举空值是 null 而非空格——读取层保持原值，下游把 ' ' / '' / null 视为同一无值'''
 
@@ -148,7 +152,7 @@ id = "D011"
 code = "stream_symbol_mismatch"
 kind = "defect"
 days = [2023-08-07, 2023-08-10, 2023-08-11, 2025-07-31, 2025-08-04]
-status = "pending"
+status = "active"
 created_at = 2026-09-02
 evidence = "ledger/evidence/D011.md"
 evidence_sha256 = "b2509906ce6463a6ec9bbb9818fbe3a791e6d75510df39579aa9aab2db210c5b"
@@ -165,10 +169,12 @@ days = [
   2026-04-20, 2026-04-21, 2026-04-22, 2026-04-23, 2026-04-24, 2026-04-27,
   2026-04-28, 2026-04-29, 2026-04-30,
 ]
-status = "pending"
+status = "active"
 created_at = 2026-09-02
 evidence = "ledger/evidence/D012.md"
 evidence_sha256 = "35e8dce0bd90689abd8373d254dd8e1d172d2f732355cb9f7cc34ca6d0f39414"
+decision_ref = "ledger/evidence/D012-decision.md"
+decision_sha256 = "9bd2220d73bb24ce1f46bc4f4d8d44e01b4c244a69379f92bbf8e593cb44185e"
 read_layer_action = "none"
 note = '''时间全带前导零（其余天 8 位占 13%–43%）。202604 导出程序指纹：与 no_trailing_comma、扁平布局同批。解码不受影响'''
 
@@ -183,3 +189,19 @@ evidence = "ledger/evidence/D013.md"
 evidence_sha256 = "c8a92c03919298739c6e5600aec1d75474b66edf29f2705f13212ebb8e0658ae"
 read_layer_action = "none"
 note = '''供应商在 09:30 / 13:00 每股各发两帧重复开盘快照。preserve 不删行；事件提取的切割规则必须处理（事件注册表）'''
+
+[[defect]]
+id = "D014"
+code = "quote_only"
+kind = "shape"
+stream = "xinqing"
+status = "pending"
+created_at = 2026-09-02
+evidence = "ledger/evidence/D008.md"
+evidence_sha256 = "c608a573d48f50a65481702ae71f834d7987b2a2e872a50838fb68c8266c0334"
+decision_ref = "ledger/evidence/D008-decision.md"
+decision_sha256 = "cc5be9807a4e5179473faa06d4c1961512304c5d41d284c25da4811ce67c4e33"
+read_layer_action = "none"
+note = '''替代 D008（D008 的 decision_ref 指向证据文件自身 = 自证，第一步第五轮红队 opencode F2；字段不可改，故 D008 转 rejected、本条重登记）。
+停牌心跳：标的只有行情（每分钟一条、价格与十档全 0），无委托无成交。摄取放行并记入收据 quote_only_symbols；只进 xinqing。
+none = 保留并打标，下游由样本宇宙消费。裁决见 D008-decision.md（2026-09-02 方案 A）。转 active 是下一个 PR。'''

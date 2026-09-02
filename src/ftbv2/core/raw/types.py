@@ -201,3 +201,4 @@ class IngestReceipt:
     streams: tuple[StreamReceipt, ...]      # 三个 stream 齐全才算完成
     dropped_by_prefix: dict[str, int] = field(default_factory=dict)   # 被筛掉的标的按前缀计数：丢弃是决策，不是静默
     quote_only_symbols: tuple[str, ...] = ()    # 只有行情、无委托无成交的标的（停牌心跳，数据表第四节）：合法形状，登记而不是静默；升序
+    empty_files: tuple[tuple[str, str], ...] = ()   # 0 字节 CSV 的 (标的, stream)（账本 D009，2026-09-02 裁定）：该标的不进该 stream；升序

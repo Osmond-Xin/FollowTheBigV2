@@ -36,12 +36,13 @@ STATUSES = ("pending", "active", "rejected", "superseded")
 LIVE = ("active", "pending")
 ACTIONS = ("patch", "gap", "none")
 REQUIRED = ("id", "code", "kind", "status", "created_at", "evidence", "evidence_sha256", "read_layer_action")
-IMMUTABLE = ("code", "kind", "created_at", "evidence", "evidence_sha256", "decision_ref", "decision_sha256", "note")
+IMMUTABLE = ("code", "kind", "created_at", "evidence", "evidence_sha256", "decision_ref", "decision_sha256", "note", "read_layer_action")
 TRANSITIONS = {("pending", "active"), ("active", "superseded"), ("pending", "rejected")}
 INITIAL = ("pending",)              # 新增条目只能 pending：转 active 必须是后续 PR，带裁决引用
 EVIDENCE_ROOTS = ("docs", "ledger", ".lineage")
 ENUM_SOURCE = Path("src/ftbv2/core/raw/ledger.py")
-KNOWN_PATCH_CODES = ("time_6digit",)   # 读取层真有处理器的补丁码（与 io.raw.store.HANDLED_PATCHES 一致，测试断言相等）
+PATCH_SOURCE = Path("src/ftbv2/io/raw/store.py")   # HANDLED_PATCHES 按 AST 从这里读：新处理器与新补丁码同 PR 落地，基线版门禁不会卡住
+ZERO64 = "0" * 64
 BATCH_FILE_RE = re.compile(r"^[A-Za-z0-9_.-]+\.toml$")
 ALL_STREAMS, STRUCTURAL = "<all streams>", "<structural: all days>"
 
@@ -64,7 +65,7 @@ def _bad_date(value: object) -> str | None:
         return f"{value!r} 不是 YYYY-MM-DD"
 
 
-def _domain_problems(ident: str, row: dict) -> list[str]:
+def _domain_problems(ident: str, row: dict, patch_codes: set[str]) -> list[str]:
     out = []
     kind, status, action = row["kind"], row["status"], row["read_layer_action"]
     if kind not in KINDS or status not in STATUSES or action not in ACTIONS:
@@ -76,12 +77,12 @@ def _domain_problems(ident: str, row: dict) -> list[str]:
             out.append(f"{ident}：日期 {why}")
     if action in ("patch", "gap") and not row.get("days"):
         out.append(f"{ident}：read_layer_action = {action} 必须按天登记（非空 days）")
-    if action == "patch" and row["code"] not in KNOWN_PATCH_CODES:
-        out.append(f"{ident}：read_layer_action = patch 的 code 必须有读取层处理器（KNOWN_PATCH_CODES），{row['code']} 没有")
+    if action == "patch" and row["code"] not in patch_codes:
+        out.append(f"{ident}：read_layer_action = patch 的 code 必须有读取层处理器（store.HANDLED_PATCHES），{row['code']} 没有")
     return out
 
 
-def _lifecycle_problems(ident: str, row: dict, live_ids: set[str]) -> list[str]:
+def _lifecycle_problems(ident: str, row: dict, live_ids: set[str]) -> list[str]:  # noqa: ARG001 — 链检查在 _chain_problems
     out = []
     if row["kind"] == "shape" and row["status"] == "active" and not row.get("decision_ref"):
         out.append(f"{ident}：形状转 active 必须带 decision_ref")
@@ -89,18 +90,44 @@ def _lifecycle_problems(ident: str, row: dict, live_ids: set[str]) -> list[str]:
         out.append(f"{ident}：decision_ref 与 decision_sha256 必须同时出现")
     if (row["status"] == "superseded") != ("superseded_by" in row):
         out.append(f"{ident}：superseded 与 superseded_by 必须同时出现")
-    target = row.get("superseded_by")
-    if target is not None and (target == ident or target not in live_ids):
-        out.append(f"{ident}：superseded_by 必须指向另一条 active / pending 条目（现为 {target}）")
+    if row["status"] in LIVE and "decision_ref" in row and str(row["decision_ref"]) == str(row["evidence"]):
+        out.append(f"{ident}：decision_ref 不得与 evidence 是同一文件（裁决不能自证；历史 rejected / superseded 条目不再受此约束）")
     return out
 
 
-def _row_problems(row: dict, live_ids: set[str]) -> list[str]:
+def _chain_problems(rows: list[dict]) -> list[str]:
+    """superseded_by 链：每跳指向存在且非 rejected 的另一条，允许 ≥ 2 层；终点必须 active / pending；无环。"""
+    by_id = {str(r["id"]): r for r in rows if "id" in r}
+    problems = []
+    for r in rows:
+        ident, cur, seen = str(r.get("id", "?")), r, {str(r.get("id"))}
+        while cur.get("superseded_by") is not None:
+            nxt = by_id.get(str(cur["superseded_by"]))
+            if nxt is None or str(nxt["id"]) in seen or nxt.get("status") == "rejected":
+                problems.append(f"{ident}：superseded_by 链断裂或成环（在 {cur.get('id')} → {cur['superseded_by']}）")
+                break
+            seen.add(str(nxt["id"]))
+            cur = nxt
+        else:
+            if cur is not r and cur.get("status") not in LIVE:
+                problems.append(f"{ident}：superseded_by 链终点 {cur.get('id')} 不是 active / pending")
+    return problems
+
+
+def handled_patches(source_text: str) -> set[str]:
+    """从 store.py 文本按 AST 取 HANDLED_PATCHES = frozenset({...}) 的字符串集合。"""
+    for node in ast.walk(ast.parse(source_text)):
+        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "HANDLED_PATCHES" for t in node.targets):
+            return {c.value for c in ast.walk(node.value) if isinstance(c, ast.Constant) and isinstance(c.value, str)}
+    return set()
+
+
+def _row_problems(row: dict, live_ids: set[str], patch_codes: set[str]) -> list[str]:
     ident = str(row.get("id", "?"))
     missing = [k for k in REQUIRED if k not in row]
     if missing:
         return [f"{ident}：缺字段 {missing}"]
-    return _domain_problems(ident, row) + _lifecycle_problems(ident, row, live_ids)
+    return _domain_problems(ident, row, patch_codes) + _lifecycle_problems(ident, row, live_ids)
 
 
 def _bound_file(ident: str, label: str, raw: str, digest: object, root: Path) -> list[str]:
@@ -138,7 +165,7 @@ def enum_values(source_text: str) -> set[str]:
     return set()
 
 
-def validate(text: str, root: Path = Path("."), enum_source: str | None = None) -> list[str]:
+def validate(text: str, root: Path = Path("."), enum_source: str | None = None, patch_source: str | None = None) -> list[str]:
     try:
         rows = _rows(text)
     except (tomllib.TOMLDecodeError, TypeError) as exc:
@@ -146,9 +173,11 @@ def validate(text: str, root: Path = Path("."), enum_source: str | None = None) 
     ids = [str(r["id"]) for r in rows if "id" in r]
     problems = [f"账本 id 重复：{i}" for i in sorted({i for i in ids if ids.count(i) > 1})]
     live_ids = {str(r["id"]) for r in rows if r.get("status") in LIVE and "id" in r}
+    patch_codes = handled_patches(patch_source if patch_source is not None else (root / PATCH_SOURCE).read_text(encoding="utf-8"))
     for row in rows:
-        row_problems = _row_problems(row, live_ids)
+        row_problems = _row_problems(row, live_ids, patch_codes)
         problems += row_problems or _evidence_problems(row, root)
+    problems += _chain_problems(rows)
     if problems:
         return problems
     if enum_source is None:
@@ -212,7 +241,7 @@ def compare(old_text: str, new_text: str) -> list[str]:
 BATCH_FIELDS = ("file", "sha256", "scanner", "scanner_sha256", "input", "input_sha256", "scanned_at")
 
 
-def _scanner_problem(b: dict, observed_dir: Path) -> str | None:
+def _scanner_problem(b: dict, observed_dir: Path, is_new: bool = True) -> str | None:
     scanner = str(b["scanner"])
     if scanner.startswith("tools/"):
         sp = observed_dir.parent.parent / scanner
@@ -221,15 +250,17 @@ def _scanner_problem(b: dict, observed_dir: Path) -> str | None:
         return None
     if not scanner.startswith("external:"):
         return f"{observed_dir / 'manifest.toml'}：scanner 必须是 tools/ 下的路径或 external:（{scanner}）"
+    if is_new and (str(b["scanner_sha256"]) == ZERO64 or len(str(b["scanner_sha256"])) != 64):
+        return f"{observed_dir / 'manifest.toml'}：external 扫描器也必须给出真实的 scanner_sha256（{b['file']}）"   # 基线里既有的批次不可改，规则只对新批次生效
     return None
 
 
-def _check_batch(b: dict, observed_dir: Path, registered: set[str]) -> list[str]:
+def _check_batch(b: dict, observed_dir: Path, registered: set[str], is_new: bool = True) -> list[str]:
     if missing := [k for k in BATCH_FIELDS if k not in b]:
         return [f"{observed_dir / 'manifest.toml'}：批次缺字段 {missing}"]
     if not BATCH_FILE_RE.match(str(b["file"])):
         return [f"{observed_dir / 'manifest.toml'}：批次文件名只能是 basename（{b['file']}）"]
-    if (why := _scanner_problem(b, observed_dir)) is not None:
+    if (why := _scanner_problem(b, observed_dir, is_new)) is not None:
         return [why]
     f = observed_dir / b["file"]
     if not f.is_file():
@@ -261,7 +292,8 @@ def check_observed(ledger_text: str, observed_dir: Path, old_manifest: str | Non
     if isinstance(batches, str):
         return [batches]
     registered = {str(r["code"]) for r in _rows(ledger_text) if r.get("status") in LIVE}   # 观测先于裁决：pending 也算已登记
-    problems = [p for b in batches for p in _check_batch(b, observed_dir, registered)]
+    old_files = {b.get("file") for b in tomllib.loads(old_manifest).get("batch", [])} if old_manifest else set()
+    problems = [p for b in batches for p in _check_batch(b, observed_dir, registered, b.get("file") not in old_files)]
     listed = {b.get("file") for b in batches}
     problems += [f"{f}：观测文件不在清单批次里" for f in sorted(observed_dir.glob("*.toml"))
                  if f.name != "manifest.toml" and f.name not in listed]
@@ -281,13 +313,18 @@ def _git(*args: str) -> str | None:
     return r.stdout.strip() if r.returncode == 0 else None
 
 
-def baseline_oid(unsafe_base: str | None) -> str | None:
+def baseline_oid(unsafe_base: str | None, path: str = "ledger/defects.toml") -> str | None:
+    """基线：merge-base(HEAD, origin/main)。当 HEAD 就在 origin/main 上（merge-base == HEAD）分两种情况：
+    工作区账本相对 HEAD 有改动（本地未提交的分支工作）⇒ 基线就是 HEAD；工作区干净（CI 的 push 到 main 事件）⇒ 退化为 HEAD^，绝不自比较。"""
     if unsafe_base is not None:
         return unsafe_base
     head, mb = _git("rev-parse", "HEAD"), _git("merge-base", "HEAD", "origin/main")
     if head is None or mb is None:
         return None
-    return _git("rev-parse", "HEAD^") if mb == head else mb    # 直接 push 到 main：绝不自比较
+    if mb != head:
+        return mb
+    dirty = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", path], capture_output=True).returncode != 0
+    return head if dirty else _git("rev-parse", "HEAD^")
 
 
 def main() -> int:
@@ -299,7 +336,7 @@ def main() -> int:
     text = path.read_text(encoding="utf-8")
     problems = validate(text)
     if not problems:
-        oid = baseline_oid(args.unsafe_base)
+        oid = baseline_oid(args.unsafe_base, args.path)
         old = _git("show", f"{oid}:{args.path}") if oid else None
         if oid is None or old is None:
             print("账本基线不可得，门禁 fail-closed", file=sys.stderr)

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import re
 import tomllib
 from dataclasses import dataclass
 from enum import Enum
@@ -60,8 +61,9 @@ class Defect:
     created_at: dt.date | None = None
     evidence: str = ""             # 收据 id 或 design-log 引用
     read_layer_action: str = "gap"
-    decision_ref: str | None = None   # 形状转 active 的裁决出处（design-log / PR）
-    evidence_sha256: str | None = None   # 证据内容哈希（收据规则落地后必填；有则门禁核对）
+    decision_ref: str | None = None   # 形状转 active 的裁决出处，必须与 evidence 是不同文件
+    evidence_sha256: str | None = None   # 证据内容哈希（必填；门禁核对文件内容）
+    decision_sha256: str | None = None
     note: str = ""
 
 
@@ -91,6 +93,23 @@ class DefectLedger:
     def patches(self, day: dt.date, stream: Stream) -> tuple[str, ...]:
         """该天该 stream 触发的补丁码（account 里 read_layer_action = patch 的按天条目）。"""
         return tuple(d.code for d in self.for_day(day, stream) if d.days and d.read_layer_action == "patch")
+
+
+_HEX64 = re.compile(r"[0-9a-f]{64}")
+
+
+def _check_chain(d: Defect, by_id: dict[str, Defect]) -> None:
+    """superseded_by 链：每一跳指向存在且非 rejected 的另一条；沿链走到底必须落在 active / pending；无环。
+    允许中间节点本身也是 superseded（替代链可以 ≥ 2 层）。"""
+    seen, cur = {d.id}, d
+    while cur.superseded_by is not None:
+        nxt = by_id.get(cur.superseded_by)
+        if nxt is None or nxt.id in seen or nxt.status == "rejected":
+            raise ValueError(f"账本 {d.id} 的 superseded_by 链断裂或成环（在 {cur.id} → {cur.superseded_by}）")
+        seen.add(nxt.id)
+        cur = nxt
+    if cur is not d and cur.status not in LIVE:
+        raise ValueError(f"账本 {d.id} 的 superseded_by 链终点 {cur.id} 不是 active / pending")
 
 
 def _date(value: object) -> dt.date:
@@ -129,7 +148,8 @@ def _parse_entry(n: int, row: dict) -> Defect:
     if kind == "shape" and status == "active" and not row.get("decision_ref"):
         raise ValueError(f"账本 {ident}：形状转 active 必须带 decision_ref（裁决出处）")
     return Defect(ident, code, stream, days, kind, status, row.get("superseded_by"), _date(row["created_at"]),
-                  str(row["evidence"]), action, row.get("decision_ref"), row.get("evidence_sha256"), row.get("note", ""))
+                  str(row["evidence"]), action, row.get("decision_ref"), row.get("evidence_sha256"), row.get("decision_sha256"),
+                  row.get("note", ""))
 
 
 def parse_ledger(text: str) -> DefectLedger:
@@ -143,12 +163,8 @@ def parse_ledger(text: str) -> DefectLedger:
     entries = tuple(_parse_entry(n, row) for n, row in enumerate(rows, 1))
     by_id = {d.id: d for d in entries}
     for d in entries:
-        if d.superseded_by is None:
-            continue
-        target = by_id.get(d.superseded_by)
-        if target is None or target.id == d.id or target.status not in LIVE:
-            raise ValueError(f"账本 {d.id} 的 superseded_by 必须指向另一条 active / pending 条目（现为 {d.superseded_by}）")
-    for d in entries:
-        if d.evidence_sha256 is not None and len(d.evidence_sha256) != 64:
-            raise ValueError(f"账本 {d.id} 的 evidence_sha256 必须是 64 位十六进制")
+        _check_chain(d, by_id)
+        for label, digest in (("evidence", d.evidence_sha256), ("decision", d.decision_sha256)):
+            if digest is not None and not _HEX64.fullmatch(digest):
+                raise ValueError(f"账本 {d.id} 的 {label}_sha256 必须是 64 位小写十六进制")
     return DefectLedger(entries, hashlib.sha256(text.encode("utf-8")).hexdigest())

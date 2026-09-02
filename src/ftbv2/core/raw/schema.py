@@ -9,11 +9,10 @@
 
 from __future__ import annotations
 
+import datetime as dt
+import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
-
-if TYPE_CHECKING:
-    import datetime as dt
+from typing import Literal
 
 Stream = Literal["orders", "trades", "xinqing"]
 STREAMS: tuple[Stream, ...] = ("orders", "trades", "xinqing")
@@ -85,6 +84,20 @@ FIELDS: dict[Stream, tuple[Field, ...]] = {
         *_ob("ask_px", 18), *_ob("ask_sz", 28), *_ob("bid_px", 38), *_ob("bid_sz", 48),
     ),
 }
+
+ARCHIVE_NAME_RE = re.compile(r"^(\d{8})\.7z$")
+
+
+def archive_day(name: str) -> "dt.date | None":
+    """规范归档文件名 YYYYMMDD.7z → 交易日；`20260303(1).7z` 重复件、`*.downloading` 半成品等一律 None（调用方登记，不静默）。"""
+    m = ARCHIVE_NAME_RE.match(name)
+    if m is None:
+        return None
+    try:
+        return dt.date(int(m.group(1)[:4]), int(m.group(1)[4:6]), int(m.group(1)[6:]))
+    except ValueError:
+        return None
+
 
 def parquet_relpath(stream: Stream, day: "dt.date") -> str:
     """{root} 下 preserve 文件的相对路径。布局是接口不变量，store 与 ingest 都从这里派生。"""

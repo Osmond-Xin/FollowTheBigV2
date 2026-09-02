@@ -1,0 +1,38 @@
+{
+ "ran_at": "2026-09-02T21:38:07.599547+00:00",
+ "mode": "design",
+ "head": "be28f7070cacc490405349fad8ed59c921bb6c27",
+ "object_sha256": "3c0decc6bf7b1d027b4f7d78ce94b451ce8dfded89aacb2262708938a745a77e",
+ "context_sha256": "c77a70a9deeda28264118daf900f02721354da5b227e50d313571ec1601b2017",
+ "lens_sha256": {
+  "工程.md": "5069df87fa270f07994eee71036e53ed3beb7c7a8f9faff05d02119829256200",
+  "方法论.md": "21ce0fa27ca1fb657431f3247c9b1e933555179cf4485ecf1fb74d5f57bbc6b3",
+  "架构.md": "5e12efa556ce78607593104570f0eb00658ca5c77e41fd61835de64321fadef4"
+ },
+ "runners": [
+  {
+   "name": "opencode",
+   "version": "/Users/osmond/.opencode/bin/opencode 1.18.26",
+   "exit": 0,
+   "verdict": "裁决：需改",
+   "output": "/Users/osmond/Documents/project/FollowTheBigV2/docs/design-log/2026-09-02-红队-事件定义-方法论.md",
+   "output_sha256": "12c9ab1c22c0d53dd0e572c1d66dd19611f443868424aa1bbf8eaf31e2fb5e82"
+  },
+  {
+   "name": "agy",
+   "version": "/Users/osmond/.local/bin/agy 1.1.24",
+   "exit": 0,
+   "verdict": "裁决：需改",
+   "output": "/Users/osmond/Documents/project/FollowTheBigV2/docs/design-log/2026-09-02-红队-事件定义-架构.md",
+   "output_sha256": "f6f6bb8f6a7222c7d240432854fc7f4e4f4c1a3399d4fc27c05e1a21c8b6efc8"
+  },
+  {
+   "name": "codex",
+   "version": "/Users/osmond/.local/bin/codex codex-cli 0.146.0",
+   "exit": 0,
+   "verdict": "裁决：不得合并",
+   "output": "/Users/osmond/Documents/project/FollowTheBigV2/docs/design-log/2026-09-02-红队-事件定义-工程.md",
+   "output_sha256": "3ba9f5fdd1df363ad33c5b529bb9e574066ebd9ec0de2418283bcca00dcbb65f"
+  }
+ ]
+}
