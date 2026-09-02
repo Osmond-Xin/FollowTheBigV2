@@ -10,6 +10,8 @@ import json
 import subprocess
 from pathlib import Path
 
+__all__ = ["sha256_file", "sha256_files", "source_state", "write_receipt"]
+
 
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()

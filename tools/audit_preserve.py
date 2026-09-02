@@ -9,9 +9,9 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
-from ftbv2.core.raw.schema import STREAMS, parquet_relpath
-from ftbv2.io.raw.audit import compare_preserve, preserve_days, symbol_mismatches
 from ftbv2.io.receipt import sha256_files, write_receipt
+from ftbv2.core.raw import STREAMS, parquet_relpath
+from ftbv2.io.raw import compare_preserve, preserve_days, symbol_mismatches
 
 
 def main() -> int:

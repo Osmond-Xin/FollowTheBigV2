@@ -33,6 +33,12 @@ purpose = "缺陷与形状账本：结构 / 证据绑定 / 枚举相等 / 语义
 smoke_test = "tests/tools/test_check_ledger.py"
 
 [[tool]]
+path = "tools/check_architecture.py"
+kind = "gate"
+purpose = "架构门禁：src 包 ⊆ architecture.toml；import-linter 契约由声明生成；跨模块只从顶层包取 __all__ 名字；禁动态 import / sys.path"
+smoke_test = "tests/tools/test_check_architecture.py"
+
+[[tool]]
 path = "tools/check_entrypoints.py"
 kind = "gate"
 purpose = "入口门禁：可执行入口只能在 tools/ 且登记于本表；无 scripts/"

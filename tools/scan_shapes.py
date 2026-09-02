@@ -7,8 +7,8 @@ import datetime as dt
 import sys
 from pathlib import Path
 
-from ftbv2.io.raw.audit import preserve_days, scan_time_shapes
 from ftbv2.io.receipt import sha256_file, write_receipt
+from ftbv2.io.raw import preserve_days, scan_time_shapes
 
 
 def main() -> int:

@@ -8,7 +8,8 @@ export PYTHONPATH=src
 run() { echo; echo "== $1"; shift; "$@"; }
 
 run "ruff（复杂度 / 私有属性 / 死注释）" uv run ruff check src tests tools
-run "import-linter（分层方向 / 纯逻辑核禁 IO）" uv run lint-imports
+run "架构门禁（src ⊆ architecture.toml / 契约由声明生成 / 跨模块只从顶层 __all__）" uv run python tools/check_architecture.py
+run "import-linter（分层方向 / 纯逻辑核禁 IO / 模块依赖，契约由 architecture.toml 生成）" uv run lint-imports
 run "私有符号跨模块 import" uv run python tools/check_private_imports.py src
 run "缺陷与形状账本（结构 / 枚举相等 / 语义 append-only；基线 = merge-base HEAD origin/main，不可覆盖）" uv run python tools/check_ledger.py
 run "入口门禁（可执行入口只能在 tools/ 且登记；无 scripts/）" uv run python tools/check_entrypoints.py
