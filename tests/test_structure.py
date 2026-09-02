@@ -1,4 +1,4 @@
-"""结构冒烟：两半必须都能 import，且纯核不得携带 IO 依赖。"""
+"""结构冒烟：两半必须都能 import，且纯逻辑核不得携带 IO 依赖。"""
 
 import importlib
 import sys

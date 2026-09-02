@@ -29,7 +29,7 @@ description: 三方异构红队（opencode/MiniMax · agy/Gemini · codex/OpenAI
 
 ## 已知的坑
 
-- crapkit 的 ratchet 基线是在零业务代码时冻的（`crapkit-ratchet.tsv` 为空）；第一批纯核代码合入后要 `uv run crapkit coverage && uv run crapkit ratchet seed` 重冻，否则 ratchet 拦不住任何东西。
+- crapkit 的 ratchet 基线是在零业务代码时冻的（`crapkit-ratchet.tsv` 为空）；第一批纯逻辑核代码合入后要 `uv run crapkit coverage && uv run crapkit ratchet seed` 重冻，否则 ratchet 拦不住任何东西。
 - macOS 自带 bash 3.2：脚本里不能用关联数组；`$var` 后紧跟中文全角字符会被吞进变量名，一律写 `${var}`。
 - opencode 的 `-f` 是数组参数，message 必须写在 `-f` 之前；agy 只接受 argv 提示词；codex 后台化时 stdin 必须 `- < prompt` 显式喂。
 - 模型常把裁决与总结写在同一行，脚本取末尾三个非空行里最后一次匹配。

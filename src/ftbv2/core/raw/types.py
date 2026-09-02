@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from ftbv2.core.raw.schema import Stream
 
-if TYPE_CHECKING:                       # 纯核不 import pathlib：Path 只作类型出现（codex 实现时指出）
+if TYPE_CHECKING:                       # 纯逻辑核不 import pathlib：Path 只作类型出现（codex 实现时指出）
     from pathlib import Path
 
     import polars as pl
@@ -142,7 +142,7 @@ class GapReason(Enum):
 
 @dataclass(frozen=True)
 class Gap:
-    """缺口是一等公民，必须带归因码；它是下游纯核入口的必需参数，接口里没有 ignore_missing。
+    """缺口是一等公民，必须带归因码；它是下游纯逻辑核入口的必需参数，接口里没有 ignore_missing。
     defects = 缺陷账本为该天该 stream **按天登记**的缺陷码（如 rescue_partial；结构性条目不算）——只转述账本，不偷读别的 stream。"""
 
     day: Day

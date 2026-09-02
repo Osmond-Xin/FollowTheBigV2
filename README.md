@@ -25,7 +25,7 @@ FollowTheBig（V1）的推倒重建。研究目标不变——从 A 股 Level-2 
 - 包：`src/ftbv2/core`（纯逻辑核）/ `src/ftbv2/io`（IO 层）。import-linter 硬拒 core → io。
 - 门禁：`bash tools/gate.sh`（ruff · import-linter · 私有 import · 词汇 · pytest），CI 同一入口（`.github/workflows/gate.yml`）。
   词汇门禁需要 `MINIMAX_API_KEY`（本机读 `~/.mmx/config.json`，CI 读仓库 secret）；判定不可用即门禁失败。
-- CRAP：`crapkit.toml`，只用 ratchet；基线已在第一批纯核代码入库后重冻。`uv run crapkit verify`。
+- CRAP：`crapkit.toml`，只用 ratchet；基线已在第一批纯逻辑核代码入库后重冻。`uv run crapkit verify`。
 - 红队 / 加固 review：`/redteam` skill → `tools/redteam/redteam.sh`，opencode(MiniMax) / agy / codex 三路并行，攻击面在 `tools/redteam/lens/`。
 - 开发流程（用户裁定）：接口 owner 写接口与契约测试 → 三方红队攻接口 → 人签字 → codex 在隔离 worktree 实现 →
   agy 只凭接口写敌对测试 → MiniMax 写探针测试 → code-review skill → 巩固 → 三方复审 → PR。
