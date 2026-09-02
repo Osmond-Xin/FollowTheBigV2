@@ -1,0 +1,36 @@
+name: gate
+
+# 门禁跑在 CI，不跑在提交者机器上（立项讨论 Q9）。main 受保护，PR 是唯一合并路径。
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # diff-cover 需要 merge-base
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: 安装
+        run: uv sync --group dev
+
+      - name: 门禁（结构 / 依赖方向 / 私有符号 / 禁用词 / 行为）
+        run: bash tools/gate.sh
+
+      - name: 增量覆盖率（仅纯逻辑核，PR 时）
+        if: github.event_name == 'pull_request'
+        run: |
+          uv run diff-cover coverage.xml \
+            --compare-branch "origin/${{ github.base_ref }}" \
+            --include 'src/ftbv2/core/*' \
+            --fail-under 90

@@ -1,0 +1,61 @@
+[project]
+name = "ftbv2"
+version = "0.0.0"
+description = "FollowTheBigV2 — 跟庄识别器 V2。术语见 CONTEXT.md，模块见 docs/架构图.html。"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "ruff>=0.16",
+  "import-linter>=2.14",
+  "pytest>=8",
+  "pytest-cov>=6",
+  "diff-cover>=9",
+  "crapkit>=0.4.11",
+]
+
+# ---------------------------------------------------------------- ruff
+# 依据 docs/design-log/2026-09-01-门禁清单.md §2。
+# PLC2701 需要 preview；max-complexity 必须显式设置，否则 C901 静默失效。
+[tool.ruff]
+preview = true
+line-length = 100
+target-version = "py312"
+src = ["src", "tests", "tools"]
+
+[tool.ruff.lint]
+select = [
+  "C901", "PLR0911", "PLR0912", "PLR0913", "PLR0915", "PLR0916", "PLR1702",
+  "SLF001", "PLC2701", "ERA001", "TID252",
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-branches = 12
+max-statements = 50
+max-args = 6
+max-returns = 6
+max-bool-expr = 5
+max-nested-blocks = 4
+
+[tool.ruff.lint.per-file-ignores]
+# IO 半豁免规模类规则，但保留 SLF001 / PLC2701 / ERA001。
+"src/ftbv2/io/**" = ["C901", "PLR0911", "PLR0912", "PLR0913", "PLR0915", "PLR0916", "PLR1702"]
+"tests/**" = ["PLR0913", "SLF001"]
+
+# -------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"
+
+# ------------------------------------------------------------ coverage
+[tool.coverage.run]
+source = ["ftbv2"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
