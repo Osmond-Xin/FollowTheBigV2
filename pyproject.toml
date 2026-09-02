@@ -3,7 +3,10 @@ name = "ftbv2"
 version = "0.0.0"
 description = "FollowTheBigV2 — 跟庄识别器 V2。术语见 CONTEXT.md，模块见 docs/架构图.html。"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "polars>=1.44.1",
+    "pyarrow>=25.0.1",
+]
 
 [dependency-groups]
 dev = [
@@ -48,7 +51,7 @@ max-nested-blocks = 4
 
 # -------------------------------------------------------------- pytest
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 testpaths = ["tests"]
 addopts = "-q"
 

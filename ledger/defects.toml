@@ -1,0 +1,38 @@
+# 缺陷账本。来源：docs/数据表.html 第四节。每一条都是登记数据；读取层对未登记的形状硬失败。
+# 日期用 ISO 格式。stream 省略 = 三个 stream 都受影响；days 省略 = 结构性、对所有天成立。
+
+[[defect]]
+code = "time_6digit"
+days = [2024-02-06, 2024-02-08]
+note = "厂商格式漂移，同一文件混有 HHMMSS 与 HHMMSSmmm。全语料范围未知，扫描待跑；新发现的天必须加到这里"
+
+[[defect]]
+code = "seq_empty"
+stream = "trades"
+days = [2024-02-06, 2024-02-08, 2024-02-28, 2024-06-17, 2024-12-05, 2024-12-06, 2025-03-07]
+note = "成交编号整列空，厂商侧缺陷，重下无效"
+
+[[defect]]
+code = "seq_sparse_dup"
+stream = "trades"
+days = [2023-11-17, 2023-12-21, 2025-05-29, 2025-08-18, 2025-08-22, 2025-08-28, 2025-08-29, 2025-09-09, 2025-09-30, 2025-10-14]
+note = "成交编号稀疏重复键"
+
+[[defect]]
+code = "rescue_partial"
+days = [2026-08-05, 2026-08-11]
+note = "7z Data Error 后救援入库；orders/trades 标的集合不一致（差 1 / 差 3）。守卫必须是标的级"
+
+[[defect]]
+code = "enum_drift"
+note = "2025 起 orders c7 多出 ' ' S，c8 多出 ' ' C I J O，trades c6 多出 ' '。读取不做映射，保留原值"
+
+[[defect]]
+code = "int32_overflow"
+stream = "xinqing"
+note = "column_13 实测 2,148,725,727 与 2,151,938,037，必须 int64"
+
+[[defect]]
+code = "nul_sentinel_sh"
+stream = "trades"
+note = "SH 的 column_6 / column_7 是 NUL 字节 '\\x00'，不是 null 不是空串"
