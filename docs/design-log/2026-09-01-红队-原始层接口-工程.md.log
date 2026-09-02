@@ -1,0 +1,69 @@
+总判：这份接口把关键不变量写进了 docstring，但多个逃生口没有绑定到类型、权限或可验证门禁，实际实现后很容易被绕成“看似合规、实则污染”。
+
+【致命】
+
+1. 证据：`RAW_PREFIX = "raw:"`；`未登记列的旁路...不得在因子里使用`；测试 `test_plan_raw_passthrough_field`、`test_execute_raw_passthrough_is_string` 明确放行。
+攻击路径：任何调用者把未登记字段写成 `raw:column_N`，即可绕过“未登记形状硬失败”，下游因子只要拿 `ReadResult.frame` 就无法区分字段是否已登记。
+修正：把 `raw:` 从 `ReadRequest.fields` 移除；新增 `RawInspectRequest` / `RawInspectResult`，返回类型带 `registered=False`，并让因子入口只接受 `SemanticFrame` 或 `tuple[Field]` 中 `kind != "raw"`。CI 判据：因子层请求含 `raw:` 必须失败。
+
+2. 证据：`7z 用 7zz 一趟流式解出`；`scratch: Path | None = None`；`archive 内布局...也接受无日期前缀的扁平布局`。
+攻击路径：恶意 7z 内含 `../`、绝对路径、符号链接、硬链接、重复文件名或超大展开文件，解包到 scratch 时覆盖 root/manifest、逃逸目录、制造磁盘耗尽；扁平布局还会放大同名 CSV 冲突。
+修正：接口契约必须规定 archive entry 校验：拒绝绝对路径、`..`、symlink、hardlink、device、重复规范化路径；所有输出 `resolve()` 后必须位于私有 `mkdtemp(mode=0700)` scratch 下；限制总展开字节、单文件字节、文件数。判据：构造含 `../manifest/YYYYMMDD.json` 和 symlink 的归档，`ingest()` 必须失败且 root 无变化。
+
+3. 证据：`幂等判据 = manifest 三 stream 齐全`；`已完成...直接返回既有 receipt，不重做`；`sha256_csv` 只在 `StreamReceipt`，没有说明幂等时校验 archive。
+攻击路径：同一天换一个 archive，只要旧 manifest 齐全就直接返回旧 receipt；污染归档、错误重跑、供应链替换都不会被发现。
+修正：manifest 必须绑定 `archive_sha256`、`ingest_version`、`schema_version`、`ledger_sha256`、`prefixes`、`7zz_version`；幂等命中前必须比较当前 archive 哈希和参数，不一致返回 `RuntimeError` 或 `AlreadyIngestedDifferentSource`。判据：同 day 不同 archive 调 ingest 必须失败。
+
+【严重】
+
+1. 证据：`parse_ledger()` 中 `row.get("stream")` 直接进入 `Defect(... stream ...)`。
+攻击路径：账本写成 `stream = "trade"`、`"Trades"` 或空串不会解析失败，只是永远匹配不上，等价于关闭该缺陷门禁。
+修正：`parse_ledger` 必须验证 `stream in STREAMS`，未知字段失败；`DefectCode(row["code"])` 之外还要校验结构性缺陷是否允许 `days=()`。判据：非法 stream 的 defects.toml 单测必须抛错。
+
+2. 证据：`sha256_csv: str  # 全部 CSV 按标的顺序拼接的 sha256`。
+攻击路径：只哈希拼接内容，不绑定 stream 名、symbol 边界、文件名、表头编码、行分隔符；不同分组可能拼成同一字节流，无法证明哪个 symbol/stream 贡献了哪些行。
+修正：哈希输入改为规范事件流：`stream\0symbol\0csv_name\0header_len\0header_bytes\0body_len\0body_bytes`；receipt 增加每个 symbol 的 `csv_sha256` 与行数。判据：调换两个 symbol 的 CSV 内容，stream 总行数相同但 receipt 必须变化且可定位。
+
+3. 证据：`root 未挂载 / 缺 stream 目录 ⇒ 构造时即 RuntimeError`；布局 `{root}/{stream}/date=YYYYMMDD.parquet`。
+攻击路径：`root` 若是 symlink、相对路径、世界可写目录或 stream 目录被 symlink 到别处，读取/写入边界不清；攻击者可替换 parquet 或 manifest。
+修正：`RawStore.__init__` 契约加入 `root.resolve(strict=True)`，拒绝 stream/manifest 为 symlink，校验 owner/permission；`ingest` 写入时使用 `os.open(..., O_NOFOLLOW)` 或等价防跟随策略。
+
+4. 证据：`时间窗永远不能下推`；`windows: tuple[Window, ...] | None`，但 `Window` 无校验。
+攻击路径：传 `Window(-1, 10**18)`、`start_ms >= end_ms`、大量 windows，会产生错误结果或超大表达式导致资源耗尽。
+修正：`Window.__post_init__` 校验 `0 <= start_ms < end_ms <= 86_400_000`；`ReadRequest` 限制 windows 数量并合并重叠区间。判据：非法窗口构造即失败。
+
+5. 证据：`symbols: frozenset[str] | None`；`request.symbols 给定时...row group 裁剪`。
+攻击路径：传空集合时语义不明，可能读 0、读全量或只做 post filter；传小写、无后缀、非法前缀符号会造成 gap 误报或裁剪失效。
+修正：`ReadRequest.__post_init__`：`symbols=None` 表示全量，`frozenset()` 必须非法；symbol 正则 `^(000|001|002|003|600|601|603|605)\d{3}\.(SZ|SH)$`，并规定是否允许非主板查询。
+
+6. 证据：`stats.row_groups_read / bytes_read 来自 footer 元数据，不是估算`。
+攻击路径：footer metadata 可被伪造或缺失；用 stats 做门禁时，攻击者可构造异常 footer 让“338x 削减”看起来成立。
+修正：stats 标注为观测辅助，不得作为正确性门禁；读取后交叉校验实际 `num_rows`、列存在、row group index 范围。判据：footer byte_size 缺失或 0 时不得通过性能断言。
+
+7. 证据：`subprocess.run(["7zz", ...])` 测试展示依赖系统 PATH；设计只说 `7zz`。
+攻击路径：PATH 前置恶意 `7zz`，摄取执行攻击者二进制；两个月后 CI/机器升级 7zz 版本，输出行为漂移。
+修正：配置固定 `seven_zip_path`，启动时校验绝对路径、版本、sha256 或签名；manifest 记录版本。判据：PATH 中假 `7zz` 不得被调用。
+
+【建议】
+
+1. 证据：`ReadResult.frame ... 行序 = 文件序`；测试只覆盖单文件。
+攻击路径：多天读取时 catalog 文件顺序若来自 glob，跨平台可能乱序，下游滚动计算退化为非确定。
+修正：`catalog()` 明确按 `request.days` 排序输出；单测覆盖 `(d2, d1)` 请求顺序和升序策略二选一。
+
+2. 证据：`output_fields 首列 "symbol"，其后按 request.fields 去重`。
+攻击路径：`fields=()` 是否只返回 symbol 未定义；重复 `symbol` 与 `raw:_symbol` 可能制造同源双列绕过字段审计。
+修正：规定 `fields` 非空或允许 symbol-only；禁止 `raw:_symbol`；输出列名冲突必须失败。
+
+3. 证据：`quality(day): manifest 里没有记录 ⇒ UNVERIFIED`。
+攻击路径：manifest 损坏、缺 stream receipt、schema_version 不匹配也可能被降级成 UNVERIFIED，掩盖破坏。
+修正：区分 `NO_MANIFEST => UNVERIFIED` 与 `CORRUPT_MANIFEST => RuntimeError`；manifest JSON schema 校验失败必须硬失败。
+
+4. 证据：`缺文件不是错误而是 Gap`；`days()` 要求三个 stream 都有文件。
+攻击路径：调用 `catalog("orders", days)` + `execute` 可在非完整三流日期上读单流，绕过完整日门禁。
+修正：接口增加 `ReadRequest.require_complete_day: bool = True` 或 `RawStore.execute` 默认检查三流齐全；救援日只能通过账本产生 `STREAM_PARTIAL`。
+
+5. 证据：`两个月后` 退化点集中在账本注释：`全语料范围未知，扫描待跑；新发现的天必须加到这里`。
+攻击路径：新缺陷只靠人手加账本，后续实现会把 RuntimeError 改成 warning 或临时 `relax` 参数来跑通批处理。
+修正：新增门禁：全量扫描产出 `ledger/observed_defects.json`，CI 比较“观测缺陷集合 ⊆ 登记缺陷集合”；任何新增形状必须先改账本再入库。
+
+裁决：不得合并
