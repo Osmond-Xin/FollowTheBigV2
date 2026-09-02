@@ -588,9 +588,10 @@ def test_adv_ingest_row_count_with_embedded_commas_and_crlf(tmp_path, root, ledg
     src = tmp_path / "src" / f"{DAY:%Y%m%d}" / "000001.SZ"
     src.mkdir(parents=True)
 
+    # 巩固第二轮：语料没有引号字段，引号是未登记形状 ⇒ 硬失败（见下一个用例）；这里只测 CRLF 与末尾空行
     order_lines = [
         '000001.SZ,000001,20220104,093000000,1,10,0,B,100000,100,',
-        '000001.SZ,000001,20220104,093001000,2,11,"0",B,100000,200,',
+        '000001.SZ,000001,20220104,093001000,2,11,0,B,100000,200,',
         '000001.SZ,000001,20220104,093002000,3,12,0,B,100000,300,',
     ]
     for s in STREAMS:
@@ -605,6 +606,21 @@ def test_adv_ingest_row_count_with_embedded_commas_and_crlf(tmp_path, root, ledg
 
     r = ingest(DAY, archive, root)
     assert all(s.n_rows_csv == s.n_rows_parquet == 3 for s in r.streams)
+
+
+@pytest.mark.skipif(shutil.which("7zz") is None, reason="需要 7zz")
+def test_adv_ingest_quoted_field_is_unregistered_shape(tmp_path, root, ledger):
+    """引号字段会让按行计数与 CSV 解析器的逻辑行分叉，语料里不存在 ⇒ 硬失败而不是猜。"""
+    src = tmp_path / "src" / f"{DAY:%Y%m%d}" / "000001.SZ"
+    src.mkdir(parents=True)
+    for s in STREAMS:
+        width = len(HEADER[s].split(","))
+        line = ",".join((['000001.SZ', '000001', '20220104', '093000000', '1', '10', '"0"', 'B', '100000', '100', ''] + [""] * width)[:width])
+        (src / CSV_NAME[s]).write_bytes(("\n".join([HEADER[s], line]) + "\n").encode("gbk"))
+    archive = tmp_path / f"{DAY:%Y%m%d}.7z"
+    subprocess.run(["7zz", "a", "-bso0", "-bsp0", str(archive), f"{DAY:%Y%m%d}"], cwd=src.parent.parent, check=True)
+    with pytest.raises(RuntimeError, match="引号"):
+        ingest(DAY, archive, root)
 
 
 @pytest.mark.skipif(shutil.which("7zz") is None, reason="需要 7zz")

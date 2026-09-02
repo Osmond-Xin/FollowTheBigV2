@@ -250,7 +250,7 @@ def test_impl_ledger_parse_rejects_duplicates_and_unknown_codes():
         parse_ledger('[[defect]]\nid = "D001"\ncode = "no_such_code"\ndays = [2024-02-06]\n')
     with pytest.raises(ValueError, match="未知|stream|unknown"):
         parse_ledger('[[defect]]\nid = "D001"\ncode = "time_6digit"\nstream = "no_stream"\ndays = [2024-02-06]\n')
-    with pytest.raises(KeyError):
+    with pytest.raises(ValueError, match="缺字段"):          # 巩固第二轮：缺字段给出条目号的明确错误，不再是原生 KeyError
         parse_ledger('[[defect]]\ncode = "time_6digit"\ndays = [2024-02-06]\n')
 
 
