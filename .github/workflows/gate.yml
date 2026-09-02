@@ -24,7 +24,18 @@ jobs:
       - name: 安装
         run: uv sync --group dev
 
-      - name: 门禁（结构 / 依赖方向 / 私有符号 / 禁用词 / 行为）
+      # Ubuntu 的 7zip 包只给 7z/7za/7zr，没有 7zz；从官方发布页取，版本与 sha256 钉死
+      - name: 安装 7zz（摄取测试需要；缺了会被 skip 而不是失败）
+        run: |
+          set -euo pipefail
+          curl -sSL -o /tmp/7zz.tar.xz https://github.com/ip7z/7zip/releases/download/24.09/7z2409-linux-x64.tar.xz
+          echo "914c7e20ad5ef8e4d3cf08620ff8894b28fe11b7eb99809d6930870fbe48a281  /tmp/7zz.tar.xz" | sha256sum -c -
+          sudo tar -xf /tmp/7zz.tar.xz -C /usr/local/bin 7zz
+          command -v 7zz && 7zz | head -2
+
+      - name: 门禁（结构 / 依赖方向 / 私有符号 / 词汇 / 行为）
+        env:
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
         run: bash tools/gate.sh
 
       - name: 增量覆盖率（仅纯逻辑核，PR 时）

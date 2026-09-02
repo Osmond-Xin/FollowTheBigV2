@@ -122,7 +122,7 @@
 <section id="why">
   <p class="eyebrow">01 — 共同前提</p>
   <h2>为什么按知识切，而不是按层切</h2>
-  <p>V1 是分层的：原始 → 特征 → 面板 → 信号 → 回测。结果是 <span class="m">scripts/</span> 与 <span class="m">src/</span> 的行数比达到 <strong>24:1</strong>，684 个顶层脚本里 473 个从未被任何文件 import。</p>
+  <p>V1 是分层的：原始 → 因子 → 面板 → 信号 → 回测。结果是 <span class="m">scripts/</span> 与 <span class="m">src/</span> 的行数比达到 <strong>24:1</strong>，684 个顶层脚本里 473 个从未被任何文件 import。</p>
   <p><strong>分层不产生模块化。</strong>层没有窄接口，于是每个脚本都能伸手进每一层。切法的推导起点不是「系统有哪些功能」，而是：<em>哪些知识一旦泄漏，就会重演已经发生过的事故？</em></p>
   <div class="scroll"><table>
     <thead><tr><th>泄漏的知识</th><th>后果（V1 实测）</th><th>散落规模</th></tr></thead>
@@ -313,8 +313,8 @@
   <div class="scroll"><table>
     <thead><tr><th>模块</th><th>归属</th><th>接口（入口点）</th><th>隐藏的知识 / 关键不变量</th></tr></thead>
     <tbody>
-      <tr><td><strong>摄取</strong></td><td><span class="tag t-io">IO</span></td><td class="num">ingest(day, source)<br>days_ingested()</td><td>7z · GBK 表头 · 前缀筛选 · 原子写 · manifest。<strong>只能承诺 preserve 层自洽，不得承诺「逐行无损」</strong>——对 77% 的数据无法验证。完成判据是三 stream 齐全，行数须与源 CSV 真实比对</td></tr>
-      <tr><td><strong>原始层存储与访问</strong></td><td><span class="tag t-io">IO</span></td><td class="num">read(stream, days, symbols, fields)<br>days(quality) · quality(day)</td><td>路径 · <span class="m">pre_buffer</span> · 谓词下推（分两层：可下推 + 扫描后过滤）· <span class="m">column_N</span>→语义 · dtype 逐位复刻 <span class="m">_i64</span> · 时间归一化 · 枚举 dictionary（绝不手写映射）· NUL 哨兵 · 缺陷账本（登记数据，未登记形状硬失败）。返回行序 = 原始序；未挂载 fail-loud。补丁在投影之后过滤之前，内部自动扩展投影</td></tr>
+      <tr><td><strong>摄取</strong></td><td><span class="tag t-io">IO</span></td><td class="num">ingest(day, archive, root) → IngestReceipt</td><td>7zz 一趟解出 · 归档条目路径校验 · GBK 表头原文进 manifest · 主板前缀筛选（「不得删行」规则的<strong>显式例外</strong>，Q15，2026-09-02 裁定；丢弃按前缀计数）· 原子写 · 幂等绑定归档哈希与前缀集。<strong>只能承诺 preserve 层自洽，不得承诺「逐行无损」</strong>——对 77% 的数据无法验证。完成判据是三 stream 齐全，行数独立计数（非空行）并与 parquet 比对，不符即硬失败</td></tr>
+      <tr><td><strong>原始层存储与访问</strong></td><td><span class="tag t-io">IO</span></td><td class="num">catalog(stream, days) → Catalog<br><strong>plan(request, catalog, ledger) → ScanPlan</strong>（纯，在 core）<br>execute(plan) → ReadResult<br>days(quality) · quality(day) · inspect_raw(…)</td><td>路径 · <span class="m">pre_buffer</span>（RawStore 内部不变量，不是计划上的旋钮）· 按 <span class="m">_symbol</span> statistics 裁剪 row group；时间窗永不下推，只扫描后过滤 · <span class="m">column_N</span>→语义 · dtype 逐位复刻 <span class="m">_i64</span>，Float64 中转丢精度判 null · 时间按行归一化 · 枚举 dictionary（绝不手写映射）· NUL 哨兵 · 缺陷账本（登记数据，未登记形状硬失败；补丁按文件隔离；账本哈希进计划）。输出带 day / symbol 保留列，行序 = 文件序；缺口只用本 stream 事实与账本归因，不偷读别的 stream；未挂载 fail-loud。<span class="m">inspect_raw</span> 是给人看的旁路，不在读取路径上</td></tr>
       <tr><td><strong>事件提取 ★</strong></td><td><span class="tag t-io">IO</span></td><td class="num">extract(days, registry_version) → EventStream + DailyRef</td><td>单向流式扫原始层，只抽统计反常。<strong>绝不含语义判断。</strong>事件定义与切割规则<strong>只从事件注册表取</strong>。事件流不变量：按 (标的, 时间) 有序；<strong>每 (标的, 交易日) ≥ 1 条日界事件</strong>。同一趟扫描顺带产出<strong>日级参考层</strong>。按 (日, stream) 粒度 checkpoint 可续跑。外置盘单读者锁（两个并发扫描会把顺序读打成 4 IOPS）</td></tr>
       <tr><td><strong>事件与因子存储</strong></td><td><span class="tag t-io">IO</span></td><td class="num">get(ref) · put(recipe_hash, table)<br>lineage(ref) · gaps(range)</td><td>存事件流 / 因子值 / 日级参考层。内容寻址 · 血缘 sidecar · 原子写 · 按天回滚 · 预算分账（持久派生 / scratch / 可重建缓存 / 审计产物）。<span class="m">recipe_hash</span> 含<strong>事件流版本</strong>（注册表版本 + 提取参数集 + 数据清单）。<strong>没有 <span class="m">force</span></strong>。缺口必须带归因码，「查不到 = 没有」被禁止</td></tr>
       <tr><td><strong>验证执行器</strong></td><td><span class="tag t-io">IO</span></td><td class="num">run(hypothesis) → Verdict<br>stale()</td><td>DAG 解析 · 验证前查 episode 预算 · 取数与注入 · 指纹持久化 · 写证据包 · 陈旧检测。<strong>判据哈希必须在取数之前固定。</strong>裁决唯一出口是证据包 <span class="m">receipt.json</span>；同目录的 <span class="m">interpretation.json</span>（解读）与 <span class="m">contrast.json</span>（对照裁决）由异构 agent 另写，<strong>非权威、不进指纹</strong></td></tr>
@@ -414,7 +414,7 @@
     <div class="open-item"><span class="open-k">最大风险</span><p><strong>不是被攻破，是被绕过。</strong>摩擦一旦大到某个程度，研究员会活在沙盒里手抄结论。血缘校验拒得了沙盒产物，拦不住手抄的结论。必须有一条「快速探索也走计划」的低摩擦路径。</p></div>
     <div class="open-item"><span class="open-k">判断前置</span><p>事件提取器里嵌着「记哪些字段」这个决定，锁在 15 小时才能重跑的位置。缓解：宽而中性，只抽统计量。但「宽」本身有代价——三个数字里的第三个就是它。</p></div>
     <div class="open-item"><span class="open-k">公理</span><p><strong>列位表无法被证明。</strong>表头在摄取时被丢掉，没有真值源；金标准回归也是用这张表生成的，存在循环。已用幸存 7z 的真实 GBK 表头逐字段对照 + V1 设计文档双重印证，但仍须一次性人工校准并留证据。</p></div>
-    <div class="open-item"><span class="open-k">时间戳</span><p><span class="m">_cont_session_mask</span>（fan-in 56）在 6 位时间戳的天上会静默丢掉整个交易所。正确检测子已验证（<span class="m">str.len_bytes().min()</span>），全语料扫描待空闲窗口执行。<strong>范围未知之前，任何走这条原语的组件都是地雷。</strong></p></div>
+    <div class="open-item"><span class="open-k">时间戳</span><p><span class="m">_cont_session_mask</span>（fan-in 56）在 6 位时间戳的天上会静默丢掉整个交易所。正确检测子已验证（<span class="m">str.len_bytes().min()</span>），全语料扫描待空闲窗口执行。<strong>范围未知之前，任何走这条原语的模块都是地雷。</strong></p></div>
     <div class="open-item"><span class="open-k">存储</span><p>先改读取代码（零迁移拿到 43.8× / 25×），做完再评估重编码。若重编码必须含 <span class="m">DELTA_BINARY_PACKED</span>——只改 dtype 会让文件<strong>变大 7–25%</strong>。</p></div>
   </div>
 </section>

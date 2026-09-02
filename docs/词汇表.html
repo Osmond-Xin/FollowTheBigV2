@@ -114,7 +114,7 @@
   </div>
   <nav class="idx" aria-label="词条索引">
     <a href="#domain">领域</a><a href="#process">研究流程</a><a href="#obs">观测与因子</a>
-    <a href="#data">数据</a><a href="#code">代码结构</a><a href="#pending">待定</a><a href="#queue">假设候选</a>
+    <a href="#data">数据</a><a href="#code">代码结构</a><a href="#pending">待定</a><a href="#queue">假设候选</a><a href="#confusable">易混淆词表</a>
   </nav>
 </header>
 
@@ -264,7 +264,7 @@
     </div></article>
 
     <article class="t"><div class="t-name">缺口<span class="t-en">Gap</span></div><div class="t-body">
-      <p>某 (标的, 交易日, stream) 在派生层<strong>没有数据</strong>的事实，必须携带归因码（缺陷账本条目、未摄取、停牌等）。缺口是下游纯核入口的<strong>必需参数</strong>；「查不到 = 没有」被禁止。缺口不是事件，不进事件流。</p>
+      <p>某 (标的, 交易日, stream) 在派生层<strong>没有数据</strong>的事实，必须携带归因码（缺陷账本条目、未摄取、停牌等）。缺口是下游纯逻辑核入口的<strong>必需参数</strong>；「查不到 = 没有」被禁止。缺口不是事件，不进事件流。</p>
     </div></article>
 
     <article class="t"><div class="t-name">事件注册表<span class="t-en">Event registry</span></div><div class="t-body">
@@ -294,23 +294,13 @@
       <div class="warn"><span class="h">这条规则的伤口来源</span>
         <p>V1 的 builder 在生成 <span class="m">sweep10</span> 时删掉涨跌停日，而 <span class="m">sweep10 ≥ 2</span> 就是庄板池的定义 ⇒ <strong>池的定义本身带盲区</strong>，而要找的正是「准备拉升的庄」。</p>
         <p>把宇宙定义关进 append-only 的预注册，这类事故在结构上不可能。</p></div>
+      <p><strong>唯一的显式例外</strong>：原始层摄取只存主板前缀（<span class="m">000/001/002/003/600/601/603/605</span>），与 V1 一致（Q15；2026-09-02 用户裁定）。被筛掉的标的按前缀计数进摄取收据。除此之外原始层不删任何行。</p>
     </div></article>
   </div>
 
-  <div class="banned" style="margin-top:24px">
-    <div class="big">禁用词：「特征」</div>
-    <p>一律说<strong>因子</strong>。业内「特征 vs 因子」的区分（中间计算列 vs 候选 alpha）说的是<strong>意图</strong>，而意图已由「有没有为它预注册一个因子假设」表达。多一个词只多一处漂移。</p>
-    <p style="color:var(--muted);font-size:14px">本表曾在「因子假设」的定义里误用「特征」——词汇漂移出现在词汇表本身里，2026-09-01 由用户当场纠正。</p>
-    <p><strong>可机械判定的规则</strong>：</p>
-    <pre>grep -rn '特征' --exclude=CONTEXT.md --exclude-dir=design-log . | grep -v '性能特征'
-# 必须无输出</pre>
-    <p><strong>两条豁免，都是自检逼出来的：</strong></p>
-    <ul>
-      <li><strong>本表自身</strong>——定义一条禁令必须提到那个词，否则规则无法定义自身。</li>
-      <li><strong><span class="m">docs/design-log/</span></strong>——归档的过程文档含第三方原文引用，<strong>改写引用等于篡改证据</strong>。</li>
-      <li>复合词 <strong>「性能特征」</strong>——接口定义的组成部分，属不同词义。</li>
-    </ul>
-    <p><strong>词汇纪律靠机器，不靠自觉</strong>——V1 的漂移不是因为没人知道规矩。</p>
+  <div class="rule" style="margin-top:24px">
+    <p>业内叫「特征」的东西，在本项目一律叫<strong>因子</strong>。业内「特征 vs 因子」的区分（中间计算列 vs 候选 alpha）说的是<strong>意图</strong>，而意图已由「有没有为它预注册一个因子假设」表达。多一个词只多一处漂移。</p>
+    <p style="color:var(--muted);font-size:14px">本表曾在「因子假设」的定义里误用「特征」，2026-09-01 由用户当场纠正。词汇纪律的执行方式见第八节——<strong>不是禁用词，没有豁免名单</strong>。</p>
   </div>
 </section>
 
@@ -403,6 +393,24 @@
       <p style="color:var(--muted);font-size:14px">来源：用户，2026-09-01。当期不做——相关性尚未探索出来，已有数据还没试完。</p>
     </div></article>
   </div>
+</section>
+
+<section id="confusable">
+  <h2>八 · 易混淆词表（词汇门禁的数据源）</h2>
+  <div class="rule">
+    <p><strong>没有禁用词，没有豁免名单。</strong>2026-09-01 用户裁定：硬拒加豁免会让人忙于豁免而不是语义。门禁检查的是「同一个概念有没有被别的说法指代」以及「有没有引入与已有定义重叠或冲突的新定义」。</p>
+    <p>执行分两级（<span class="m">tools/check_vocab.py</span>）：① grep 右列找候选，只找不裁决；② 便宜的模型逐条判定语义——候选处若在<strong>指代左列的概念</strong>即冲突；数学与固定搭配（特征值、性能特征）、引用或描述 V1 与第三方原文、讨论本表自身、泛指他义，皆合法。另对改动的文件检查是否<strong>新定义</strong>了与左列重叠的概念。任一冲突或判定不可用即门禁失败。</p>
+  </div>
+  <div class="scroll" style="margin-top:14px"><table>
+    <thead><tr><th>定义词</th><th>外界会混用、须重点检测的说法</th></tr></thead>
+    <tbody>
+      <tr><td><strong>因子</strong></td><td>特征、feature</td></tr>
+      <tr><td><strong>假设</strong></td><td>命题、proposition</td></tr>
+      <tr><td><strong>因子假设 / 组合假设 / 策略假设</strong></td><td>L1、L2、L3（V1 的编号，与 Level-2 数据源撞名）</td></tr>
+      <tr><td><strong>模块 / 接口 / 缝 / 适配器</strong></td><td>组件、服务、component、service、boundary</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note" style="margin-top:10px">右列只收「几乎只会以混淆义出现」的词。像「结论」「信号」「边界」这类泛用词不进表——候选几百条，判定成本全花在泛用义上，没有收益；它们靠第三步的定义冲突检查兜底。</p>
 </section>
 
 <footer>

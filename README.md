@@ -17,22 +17,21 @@ FollowTheBig（V1）的推倒重建。研究目标不变——从 A 股 Level-2 
 
 ## 现在处于什么阶段
 
-**设计阶段收口，仓库与门禁已立，尚未写一行业务代码。** 所有设计决策（Q1–Q18 + 红队后九条）见 `design-log/2026-09-01-立项讨论.md`；
-深模块评审的四条高优先级已采纳（`design-log/2026-09-01-深模块评审.md`），中低项待裁决。
+**第一块代码已落：原始层（摄取 + 存储访问）。** 设计决策见 `design-log/2026-09-01-立项讨论.md`；深模块评审四条高优先级已采纳，中低项待裁决；
+第一轮实施的完整过程与未竟事项见 `design-log/2026-09-02-原始层第一轮实施.md`——**新 session 先读它**。
 
-- 仓库：`github.com/Osmond-Xin/FollowTheBigV2`（私有）。**分支保护需要 GitHub Pro 或转公开**，目前 main 未受保护。
+- 仓库：`github.com/Osmond-Xin/FollowTheBigV2`（公开）。main 受 ruleset 保护：只能经 PR 合入，须通过 `gate` 检查，禁止 force-push 与删除。
+- 分支：`raw/consolidate` = 原始层实现 + 三层测试（契约 45 / 敌对 27 / 探针 28），门禁全绿，待合并。
 - 包：`src/ftbv2/core`（纯逻辑核）/ `src/ftbv2/io`（IO 层）。import-linter 硬拒 core → io。
-- 门禁：`bash tools/gate.sh`（ruff · import-linter · 私有 import · 禁用词 · pytest），CI 同一入口（`.github/workflows/gate.yml`）。
-  **禁用词门禁当前红**：命中 5 处（V1 原文引用 + 词汇表渲染物），待裁决改文还是改豁免。
-- CRAP：`crapkit.toml`，只用 ratchet（基线已冻）。`uv run crapkit verify`。
-- 红队：`/redteam` skill → `tools/redteam/redteam.sh`，mmx / agy / codex 三路并行，攻击面在 `tools/redteam/lens/`。
+- 门禁：`bash tools/gate.sh`（ruff · import-linter · 私有 import · 词汇 · pytest），CI 同一入口（`.github/workflows/gate.yml`）。
+  词汇门禁需要 `MINIMAX_API_KEY`（本机读 `~/.mmx/config.json`，CI 读仓库 secret）；判定不可用即门禁失败。
+- CRAP：`crapkit.toml`，只用 ratchet；基线已在第一批纯逻辑核代码入库后重冻。`uv run crapkit verify`。
+- 红队 / 加固 review：`/redteam` skill → `tools/redteam/redteam.sh`，opencode(MiniMax) / agy / codex 三路并行，攻击面在 `tools/redteam/lens/`。
+- 开发流程（用户裁定）：接口 owner 写接口与契约测试 → 三方红队攻接口 → 人签字 → codex 在隔离 worktree 实现 →
+  agy 只凭接口写敌对测试 → MiniMax 写探针测试 → code-review skill → 巩固 → 三方复审 → PR。
 
-**卡点**：三个必测数字——事件流实际体积 / 一次全量提取耗时 / 「宽而中性」的宽度——
-20 个交易日、1 个 stream 跑一遍即得。**但机器上可能有 V1 的生产作业在读同一块 USB 盘**
-（`rebuild_keep_locked.py`），且项目有 kernel panic 前科。**动盘前先 `ps`。**
-
-**第一步**（已定）：codex 窄实验工厂——3–5 天扫描闭环 / 1–2 周账本进 CI / 3–4 周第一个假设。
-此前不建多 agent 流水线、不建收据、不建 runner 编排。
+**卡点**：真实数据第一次摄取就红——停牌股只有行情 CSV、无委托 / 成交，摄取契约把它当残缺归档硬拒；裁决选项见
+`design-log/2026-09-02-原始层第一轮实施.md` 末尾。V1 作业已结束，外置盘可用。
 
 ## 硬规则速查
 
@@ -41,7 +40,7 @@ FollowTheBig（V1）的推倒重建。研究目标不变——从 A 股 Level-2 
 - 结论落证据包 `.lineage/<id>/receipt.json`，**绝不写回代码注释**
 - 预注册 append-only；样本宇宙属于预注册；阈值只属于预注册
 - 裁决用经验置换检验，三态 + 附加标签；接口上没有旋钮
-- 「特征」是禁用词，一律说「因子」；`grep -rn '特征' --exclude=CONTEXT.md --exclude-dir=design-log . | grep -v '性能特征'` 必须无输出
+- 同一个概念只许一个词。**没有禁用词，没有豁免名单**：`tools/check_vocab.py` 按 CONTEXT.md 第八节的易混淆词表 grep 找候选，再由便宜的模型判定语义，并对改动文件查有没有引入与已有定义重叠的新定义
 - 不得声称原始层「逐行无损」——77% 的交易日无法验证
 - V1 派生库一个字节都不带进来；V1 结论（正负）全部待复验；V1 只是灵感来源
 
