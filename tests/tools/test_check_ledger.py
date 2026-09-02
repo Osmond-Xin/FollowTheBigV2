@@ -83,7 +83,7 @@ def test_superseded_by_rejects_self_and_dead_targets(root):
     assert any("另一条 active / pending" in p for p in validate(dead, root, ENUM_SRC))
 
 
-def test_evidence_is_mandatory_and_bound_within_trust_boundary(root):
+def test_evidence_is_mandatory_and_bound_inside_repo(root):
     (root / "docs" / "ev.md").write_text("v2", encoding="utf-8")
     assert any("被改写" in p for p in validate(full_ledger(), root, ENUM_SRC))
     (root / "docs" / "ev.md").write_text("v1", encoding="utf-8")
