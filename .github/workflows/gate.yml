@@ -24,7 +24,9 @@ jobs:
       - name: 安装
         run: uv sync --group dev
 
-      - name: 门禁（结构 / 依赖方向 / 私有符号 / 禁用词 / 行为）
+      - name: 门禁（结构 / 依赖方向 / 私有符号 / 词汇 / 行为）
+        env:
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
         run: bash tools/gate.sh
 
       - name: 增量覆盖率（仅纯逻辑核，PR 时）
