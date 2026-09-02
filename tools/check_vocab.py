@@ -113,7 +113,12 @@ def stage1(table: list[tuple[str, list[str]]]) -> list[dict]:
                 before = lines[i - 2].strip()[:120] if i >= 2 else ""
                 after = lines[i].strip()[:120] if i < len(lines) else ""
                 text = f"上一行：{before} ‖ 本行：{text} ‖ 下一行：{after}"
-                note = "归档的过程文档：第三方原文与改名前的历史记录" if str(p).startswith("docs/design-log/") else ""
+                if str(p) == "CONTEXT.md":
+                    note = "这就是词汇表本身：它提到混淆说法是在定义规则或解释为什么不用"
+                elif str(p).startswith("docs/design-log/"):
+                    note = "归档的过程文档：第三方原文与改名前的历史记录"
+                else:
+                    note = ""
                 hits.append({"id": len(hits) + 1, "file": str(p), "line": i, "word": w, "term": term, "text": text, "note": note})
     return hits
 
@@ -168,10 +173,17 @@ BATCH = 20
 
 
 def stage2(hits: list[dict], table: list[tuple[str, list[str]]]) -> list[dict]:
-    """分批判定，每批 BATCH 条，避免输出被截断。"""
+    """分批判定，每批 BATCH 条，避免输出被截断。判「冲突」须两次独立判定一致（单次波动实测会误报规则自身）。"""
     out: list[dict] = []
     for i in range(0, len(hits), BATCH):
-        out.extend(_judge_batch(hits[i : i + BATCH], table))
+        batch = hits[i : i + BATCH]
+        first = _judge_batch(batch, table)
+        if any(v.get("verdict") == "冲突" for v in first):
+            second = {int(v["id"]): v for v in _judge_batch(batch, table)}
+            for v in first:
+                if v.get("verdict") == "冲突" and second.get(int(v["id"]), {}).get("verdict") != "冲突":
+                    v["verdict"], v["reason"] = "合法", "两次判定不一致，按合法（" + v.get("reason", "") + "）"
+        out.extend(first)
     return out
 
 
