@@ -1,0 +1,47 @@
+# 依据 docs/design-log/2026-09-01-门禁清单.md §5：只用 ratchet 模式，绝不一上来开绝对阈值。
+# target 默认 6 已显式设回 30；IO 半与 tools 用 coverage_optional。
+# 命令序：inventory → coverage → ratchet seed（冻 baseline）→ verify。
+[crapkit]
+target = 30
+
+[[scope]]
+name = "core"
+paths = ["src/ftbv2/core"]
+languages = ["python"]
+
+[[scope]]
+name = "io"
+paths = ["src/ftbv2/io"]
+languages = ["python"]
+coverage_optional = true
+
+[[scope]]
+name = "tools"
+paths = ["tools"]
+languages = ["python", "shell"]
+coverage_optional = true
+
+[exclude]
+globs = ["src/ftbv2/__init__.py", "**/node_modules/**", "**/dist/**", "**/build/**", "**/vendor/**", "**/*.test.*", "**/*.spec.*", "**/test_*.py", "**/*_test.py", "**/conftest.py", "**/*_test.go", "*.config.ts", "*.config.js", "*.config.mts", "**/*.config.ts", "**/*.config.js", "**/*.config.mts"]
+
+[[lane]]
+name = "py"
+command = "uv run python -m pytest --cov --cov-branch --cov-report=json:.crapkit/cov/py.json --junitxml=.crapkit/cov/junit-py.xml"
+artifact = ".crapkit/cov/py.json"
+results_artifact = ".crapkit/cov/junit-py.xml"
+parser = "coveragepy"
+scopes = ["core"]
+
+# Declare one [[lane]] per coverage command, then run `crapkit coverage`.
+# [[lane]]
+# name = "js"
+# command = "npx vitest run --coverage --coverage.reportsDirectory=.crapkit/cov/js --reporter=default --reporter=junit --outputFile=.crapkit/cov/js/junit.xml"
+# artifact = ".crapkit/cov/js/coverage-final.json"
+# results_artifact = ".crapkit/cov/js/junit.xml"
+# parser = "istanbul"
+# scopes = ["<your-scope>"]
+
+# `crapkit test-scoped FILES` runs one command per scope, with {files}
+# replaced by that scope's files, each quoted.
+[crapkit.scoped_tests]
+core = "uv run python -m pytest {files} -q -p no:cacheprovider"

@@ -17,7 +17,15 @@ FollowTheBig（V1）的推倒重建。研究目标不变——从 A 股 Level-2 
 
 ## 现在处于什么阶段
 
-**设计阶段，前沿已空。** 尚未写一行代码。所有设计决策（Q1–Q18 + 红队后九条）见 `design-log/2026-09-01-立项讨论.md`。
+**设计阶段收口，仓库与门禁已立，尚未写一行业务代码。** 所有设计决策（Q1–Q18 + 红队后九条）见 `design-log/2026-09-01-立项讨论.md`；
+深模块评审的四条高优先级已采纳（`design-log/2026-09-01-深模块评审.md`），中低项待裁决。
+
+- 仓库：`github.com/Osmond-Xin/FollowTheBigV2`（私有）。**分支保护需要 GitHub Pro 或转公开**，目前 main 未受保护。
+- 包：`src/ftbv2/core`（纯逻辑核）/ `src/ftbv2/io`（IO 层）。import-linter 硬拒 core → io。
+- 门禁：`bash tools/gate.sh`（ruff · import-linter · 私有 import · 禁用词 · pytest），CI 同一入口（`.github/workflows/gate.yml`）。
+  **禁用词门禁当前红**：命中 5 处（V1 原文引用 + 词汇表渲染物），待裁决改文还是改豁免。
+- CRAP：`crapkit.toml`，只用 ratchet（基线已冻）。`uv run crapkit verify`。
+- 红队：`/redteam` skill → `tools/redteam/redteam.sh`，mmx / agy / codex 三路并行，攻击面在 `tools/redteam/lens/`。
 
 **卡点**：三个必测数字——事件流实际体积 / 一次全量提取耗时 / 「宽而中性」的宽度——
 20 个交易日、1 个 stream 跑一遍即得。**但机器上可能有 V1 的生产作业在读同一块 USB 盘**
