@@ -1,7 +1,15 @@
-"""缺陷账本：按天变化的数据缺陷是**登记数据**，不是散在代码里的 if。未登记的形状一律硬失败。
+"""缺陷与形状账本：按天变化的数据缺陷、以及语料里登记过的形状（含良性），都是**登记数据**，不是散在代码里的 if。
+未登记的形状一律硬失败。
 
-账本文件 ledger/defects.toml（纯数据，git 跟踪）。本模块只解析文本（纯），读文件是 IO 层的事。
-数据表第四节是账本内容的来源；红队修正：IO 阶段只能基于账本与元数据分支，不能基于研究统计结果分支。
+账本文件 ledger/defects.toml（纯数据，git 跟踪，事实单源）。本模块只解析文本（纯），读文件是 IO 层的事。
+每条：id · code · kind(defect|shape) · stream · days|结构性 · status(pending|active|superseded) · superseded_by ·
+created_at · evidence · read_layer_action(patch|gap|none) · note。
+- 读取层只看 **active** 条目：pending 是待裁决（不得作为数据或门禁依据），superseded 已被替换；
+- `read_layer_action`：patch = 改变解码行为；gap = 缺口归因时转述；none = 保留并打标，下游由样本宇宙消费；
+- 代码里的 DefectCode 枚举只是账本 code 集合的投影，CI 校验两者相等（tools/check_ledger.py）；
+- 账本 append-only 是语义级的（按 id 比较，不是文本 diff）：禁删 id、禁改 code/kind/stream/created_at/evidence、
+  days 只许并集、状态只许 pending→active→superseded，废弃只能 superseded_by 指向已存在 id 且原条目保留。
+红队修正：IO 阶段只能基于账本与元数据分支，不能基于研究统计结果分支。
 """
 
 from __future__ import annotations
@@ -16,77 +24,109 @@ from ftbv2.core.raw.schema import STREAMS, Stream
 
 
 class DefectCode(Enum):
-    TIME_6DIGIT = "time_6digit"            # column_4 混有 HHMMSS 六位；补丁：按行长度归一化 ×1000
-    SEQ_EMPTY = "seq_empty"                # trades column_5 整列空（厂商侧）
-    SEQ_SPARSE_DUP = "seq_sparse_dup"      # trades column_5 稀疏重复键
-    RESCUE_PARTIAL = "rescue_partial"      # 7z Data Error 后救援入库：orders / trades 标的集合不一致
-    ENUM_DRIFT = "enum_drift"              # 2025 起枚举新值（' ' S / C I J O）——只登记事实，读取不做映射
-    INT32_OVERFLOW = "int32_overflow"      # xinqing column_13 超 int32，必须 int64
-    NUL_SENTINEL_SH = "nul_sentinel_sh"    # SH trades column_6/7 全为 '\x00'
+    TIME_6DIGIT = "time_6digit"                    # column_4 混有 HHMMSS / HMMSS；补丁：按行归一化
+    SEQ_EMPTY = "seq_empty"                        # trades column_5 整列空（厂商侧）
+    SEQ_SPARSE_DUP = "seq_sparse_dup"              # trades column_5 稀疏重复键
+    RESCUE_PARTIAL = "rescue_partial"              # 7z Data Error 后救援入库：orders / trades 标的集合不一致
+    ENUM_DRIFT = "enum_drift"                      # 2025 起枚举新值（' ' S / C I J O）——只登记事实，读取不做映射
+    INT32_OVERFLOW = "int32_overflow"              # xinqing column_13 超 int32，必须 int64
+    NUL_SENTINEL_SH = "nul_sentinel_sh"            # SH trades column_6/7 全为 '\x00'
+    QUOTE_ONLY = "quote_only"                      # 停牌心跳：标的只有行情、无委托无成交（合法形状，收据 quote_only_symbols）
+    EMPTY_FILE = "empty_file"                      # 某标的某 stream 的 CSV 是 0 字节（合法形状，收据 empty_files；2026-09-02 裁定）
+    NO_TRAILING_COMMA = "no_trailing_comma"        # 三条流各少尾逗号幽灵列；枚举空值为 null 而非空格
+    STREAM_SYMBOL_MISMATCH = "stream_symbol_mismatch"  # 非救援日标的级单边缺失（有成交无委托等），原因不可考
+    LEADING_ZERO_TIME = "leading_zero_time"        # 时间全带前导零（8 位占比 0）：202604 导出程序指纹
+    DUPLICATE_OPEN_FRAME = "duplicate_open_frame"  # 09:30 / 13:00 每股各发两帧重复开盘快照；preserve 不删，事件提取须处理
 
 
-PATCH_CODES: frozenset[DefectCode] = frozenset({DefectCode.TIME_6DIGIT})
-"""读取时会改变解码行为的缺陷码。其余条目只登记事实（缺口归因时转述），不是补丁。"""
+KINDS = ("defect", "shape")
+STATUSES = ("pending", "active", "superseded")
+ACTIONS = ("patch", "gap", "none")
+REQUIRED = ("id", "code", "kind", "status", "created_at", "evidence", "read_layer_action")
 
 
 @dataclass(frozen=True)
 class Defect:
-    id: str                        # 稳定标识；账本 append-only：改一条 = 新增一条并 supersedes 旧 id（CI 门禁待建，纪律先立）
+    id: str                        # 稳定主键；语义 append-only 按它比较
     code: DefectCode
     stream: Stream | None          # None = 三个 stream 都受影响
-    days: tuple[dt.date, ...]      # 空元组 = 结构性、对所有天成立（如 NUL 哨兵、int32 溢出）
+    days: tuple[dt.date, ...]      # 空元组 = 结构性、对所有天成立
+    kind: str = "defect"
+    status: str = "active"
+    superseded_by: str | None = None
+    created_at: dt.date | None = None
+    evidence: str = ""             # 收据 id 或 design-log 引用
+    read_layer_action: str = "gap"
     note: str = ""
 
 
 @dataclass(frozen=True)
 class DefectLedger:
-    entries: tuple[Defect, ...]
+    entries: tuple[Defect, ...]    # 全部条目（含 pending / superseded），供门禁与文档生成
     sha256: str                    # 账本文本的内容哈希，进 ScanPlan / 证据指纹
 
+    def active(self) -> tuple[Defect, ...]:
+        return tuple(d for d in self.entries if d.status == "active")
+
     def for_day(self, day: dt.date, stream: Stream) -> tuple[Defect, ...]:
-        """该天该 stream 登记在案的缺陷（含全天性条目），顺序 = 账本顺序。"""
+        """该天该 stream 登记在案的 active 条目（含结构性），顺序 = 账本顺序。"""
         return tuple(
-            d for d in self.entries
+            d for d in self.active()
             if (d.stream is None or d.stream == stream) and (not d.days or day in d.days)
         )
 
     def day_scoped_codes(self, day: dt.date, stream: Stream) -> tuple[str, ...]:
-        """该天该 stream **按天登记**的缺陷码（不含结构性条目），去重保序。缺口归因用它。"""
+        """该天该 stream **按天登记**且读取层要理会（action ≠ none）的码，去重保序。缺口归因用它。"""
         out: list[str] = []
         for d in self.for_day(day, stream):
-            if d.days and d.code.value not in out:
+            if d.days and d.read_layer_action != "none" and d.code.value not in out:
                 out.append(d.code.value)
         return tuple(out)
 
     def patches(self, day: dt.date, stream: Stream) -> tuple[str, ...]:
-        """该天该 stream 触发的补丁码（PATCH_CODES ∩ 按天登记）。"""
-        return tuple(c for c in self.day_scoped_codes(day, stream) if DefectCode(c) in PATCH_CODES)
+        """该天该 stream 触发的补丁码（account 里 read_layer_action = patch 的按天条目）。"""
+        return tuple(
+            d.code.value for d in self.for_day(day, stream)
+            if d.days and d.read_layer_action == "patch"
+        )
+
+
+def _date(value: object) -> dt.date:
+    return value if isinstance(value, dt.date) else dt.date.fromisoformat(str(value))
+
+
+def _parse_entry(n: int, row: dict) -> Defect:
+    missing = [k for k in ("id", "code") if k not in row]
+    if missing:
+        raise ValueError(f"账本第 {n} 条缺字段 {missing}")
+    ident = str(row["id"])
+    stream = row.get("stream")
+    if stream is not None and stream not in STREAMS:
+        raise ValueError(f"账本里未知的 stream {stream!r}（合法值 {STREAMS}）")
+    code = DefectCode(row["code"])
+    missing = [k for k in REQUIRED if k not in row]
+    if missing:
+        raise ValueError(f"账本 {ident} 缺字段 {missing}")
+    kind, status, action = row["kind"], row["status"], row["read_layer_action"]
+    if kind not in KINDS or status not in STATUSES or action not in ACTIONS:
+        raise ValueError(f"账本 {ident} 的 kind/status/read_layer_action 不在登记值域：{kind}/{status}/{action}")
+    if (status == "superseded") != ("superseded_by" in row):
+        raise ValueError(f"账本 {ident}：superseded 与 superseded_by 必须同时出现")
+    days = tuple(_date(d) for d in row.get("days", []))
+    return Defect(ident, code, stream, days, kind, status, row.get("superseded_by"),
+                  _date(row["created_at"]), str(row["evidence"]), action, row.get("note", ""))
 
 
 def parse_ledger(text: str) -> DefectLedger:
-    """解析 defects.toml 文本。格式：
-
-    [[defect]]
-    id = "D001"              # 必填、唯一
-    code = "time_6digit"
-    stream = "orders"        # 可省略 = 全部 stream
-    days = [2024-02-06]      # 可省略 = 结构性
-    note = "…"
-    """
+    """解析 defects.toml 文本（格式见模块 docstring）。superseded_by 必须指向账本里已存在的 id。"""
     data = tomllib.loads(text)
-    entries = []
-    seen: set[str] = set()
-    for n, row in enumerate(data.get("defect", []), 1):
-        missing = [k for k in ("id", "code") if k not in row]
-        if missing:
-            raise ValueError(f"账本第 {n} 条缺字段 {missing}")
-        ident = str(row["id"])
-        if ident in seen:
-            raise ValueError(f"账本 id 重复：{ident}")
-        seen.add(ident)
-        days = tuple(dt.date.fromisoformat(str(d)) if not isinstance(d, dt.date) else d for d in row.get("days", []))
-        stream = row.get("stream")
-        if stream is not None and stream not in STREAMS:
-            raise ValueError(f"账本里未知的 stream {stream!r}（合法值 {STREAMS}）")
-        entries.append(Defect(ident, DefectCode(row["code"]), stream, days, row.get("note", "")))
-    return DefectLedger(tuple(entries), hashlib.sha256(text.encode("utf-8")).hexdigest())
+    rows = data.get("defect", [])
+    ids = [str(row["id"]) for row in rows if "id" in row]
+    dup = sorted({i for i in ids if ids.count(i) > 1})
+    if dup:
+        raise ValueError(f"账本 id 重复：{dup[0]}")
+    entries = tuple(_parse_entry(n, row) for n, row in enumerate(rows, 1))
+    for d in entries:
+        if d.superseded_by is not None and d.superseded_by not in ids:
+            raise ValueError(f"账本 {d.id} 的 superseded_by 指向不存在的 id {d.superseded_by}")
+    return DefectLedger(entries, hashlib.sha256(text.encode("utf-8")).hexdigest())

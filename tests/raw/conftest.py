@@ -17,9 +17,23 @@ DAY = dt.date(2022, 1, 4)
 DAY6 = dt.date(2024, 2, 6)          # 账本登记了 time_6digit 的天
 DAY_RESCUE = dt.date(2026, 8, 5)    # 账本登记了 rescue_partial 的天
 
+_DEFAULTS = {"kind": '"defect"', "status": '"active"', "created_at": "2026-09-01",
+             "evidence": '"夹具"', "read_layer_action": '"gap"'}
+
+
 def ledger_toml(*entries: str) -> str:
-    """账本工厂：每个测试自己声明用哪几条，不共享一份写死的账本。"""
-    return "".join(f"[[defect]]\nid = \"D{i:03d}\"\n{e}\n\n" for i, e in enumerate(entries, 1))
+    """账本工厂：每个测试自己声明用哪几条，不共享一份写死的账本。
+    条目只需写 code / days / stream 等关心的字段，其余必填字段（kind / status / created_at / evidence /
+    read_layer_action）按默认补齐；time_6digit 默认 action = patch。"""
+    out = []
+    for i, e in enumerate(entries, 1):
+        given = {line.split("=")[0].strip() for line in e.splitlines() if "=" in line}
+        defaults = dict(_DEFAULTS)
+        if 'code = "time_6digit"' in e:
+            defaults["read_layer_action"] = '"patch"'
+        extra = "".join(f"{k} = {v}\n" for k, v in defaults.items() if k not in given)
+        out.append(f"[[defect]]\nid = \"D{i:03d}\"\n{e}\n{extra}\n")
+    return "".join(out)
 
 
 TIME6 = 'code = "time_6digit"\ndays = [2024-02-06]'

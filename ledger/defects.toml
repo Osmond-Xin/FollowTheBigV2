@@ -1,46 +1,168 @@
-# 缺陷账本。来源：docs/数据表.html 第四节。每一条都是登记数据；读取层对未登记的形状硬失败。
-# 日期用 ISO 格式。stream 省略 = 三个 stream 都受影响；days 省略 = 结构性、对所有天成立。
+# 缺陷与形状账本（事实单源）。每一条都是登记数据；读取层对未登记的形状硬失败，只看 status = active 的条目。
+# 字段：id · code · kind(defect|shape) · stream(省略 = 三个 stream) · days(省略 = 结构性) · status(pending|active|superseded) ·
+#       superseded_by · created_at · evidence(收据 id 或 design-log 引用) · read_layer_action(patch|gap|none) · note。
+# 语义 append-only（tools/check_ledger.py）：禁删 id；禁改 code/kind/stream/created_at/evidence；days 只许并集；
+# 状态只许 pending→active→superseded；废弃只能 superseded_by 指向已存在 id，原条目保留。日期 ISO。
+# 待裁决的形状只能 pending；转 active 须在 note 写裁决出处。收据 id 在收据规则（工程管束 R1）落地前用 design-log 引用。
 
 [[defect]]
 id = "D001"
 code = "time_6digit"
+kind = "defect"
 stream = "xinqing"
 days = [2024-02-06, 2024-02-08]
+status = "active"
+created_at = 2026-09-01
+evidence = "docs/数据表.html 第四节（2026-09-01 只读实测）"
+read_layer_action = "patch"
 note = "厂商格式漂移，同一文件混有 HHMMSS / HMMSS 与 HHMMSSmmm / HMMSSmmm。2026-09-02 全语料扫描（1122 天 × 3 流，2300 亿行，design-log/2026-09-02-时间形状扫描.tsv）：只在这两天的 xinqing 出现（各约 740 万行），orders / trades 那两天正常；其余全语料时间串只有 8 与 9 位。新发现的天必须加到这里"
 
 [[defect]]
 id = "D002"
 code = "seq_empty"
+kind = "defect"
 stream = "trades"
 days = [2024-02-06, 2024-02-08, 2024-02-28, 2024-06-17, 2024-12-05, 2024-12-06, 2025-03-07]
+status = "active"
+created_at = 2026-09-01
+evidence = "docs/数据表.html 第四节（2026-09-01 只读实测）"
+read_layer_action = "gap"
 note = "成交编号整列空，厂商侧缺陷，重下无效"
 
 [[defect]]
 id = "D003"
 code = "seq_sparse_dup"
+kind = "defect"
 stream = "trades"
 days = [2023-11-17, 2023-12-21, 2025-05-29, 2025-08-18, 2025-08-22, 2025-08-28, 2025-08-29, 2025-09-09, 2025-09-30, 2025-10-14]
+status = "active"
+created_at = 2026-09-01
+evidence = "docs/数据表.html 第四节（2026-09-01 只读实测）"
+read_layer_action = "gap"
 note = "成交编号稀疏重复键"
 
 [[defect]]
 id = "D004"
 code = "rescue_partial"
+kind = "defect"
 days = [2026-08-05, 2026-08-11]
+status = "active"
+created_at = 2026-09-01
+evidence = "docs/数据表.html 第四节（2026-09-01 只读实测）"
+read_layer_action = "gap"
 note = "7z Data Error 后救援入库；orders/trades 标的集合不一致（差 1 / 差 3）。守卫必须是标的级"
 
 [[defect]]
 id = "D005"
 code = "enum_drift"
+kind = "defect"
+status = "active"
+created_at = 2026-09-01
+evidence = "docs/数据表.html 第四节（2026-09-01 只读实测）"
+read_layer_action = "none"
 note = "2025 起 orders c7 多出 ' ' S，c8 多出 ' ' C I J O，trades c6 多出 ' '。读取不做映射，保留原值"
 
 [[defect]]
 id = "D006"
 code = "int32_overflow"
+kind = "defect"
 stream = "xinqing"
+status = "active"
+created_at = 2026-09-01
+evidence = "docs/数据表.html 第四节（2026-09-01 只读实测）"
+read_layer_action = "none"
 note = "column_13 实测 2,148,725,727 与 2,151,938,037，必须 int64"
 
 [[defect]]
 id = "D007"
 code = "nul_sentinel_sh"
+kind = "defect"
 stream = "trades"
+status = "active"
+created_at = 2026-09-01
+evidence = "docs/数据表.html 第四节（2026-09-01 只读实测）"
+read_layer_action = "none"
 note = "SH 的 column_6 / column_7 是 NUL 字节 '\\x00'，不是 null 不是空串"
+
+[[defect]]
+id = "D008"
+code = "quote_only"
+kind = "shape"
+stream = "xinqing"
+status = "active"
+created_at = 2026-09-02
+evidence = "design-log/2026-09-02-原始层第一轮实施.md（20220104 6 只 / 20220505 72 只重摄验证）"
+read_layer_action = "none"
+note = "停牌心跳：标的只有行情（每分钟一条、价格与十档全 0），无委托无成交。摄取放行并记入收据 quote_only_symbols；只进 xinqing。none = 保留并打标，下游由样本宇宙消费。每天约 6 只（V1 全语料均值 3.0）"
+
+[[defect]]
+id = "D009"
+code = "empty_file"
+kind = "shape"
+stream = "xinqing"
+days = [2022-06-27]
+status = "active"
+created_at = 2026-09-02
+evidence = "design-log/2026-09-02-V1入库程序复审.md（605222.SH/行情.csv 在 7z 内 Size=0，当天 orders 11,154 / trades 7,224 行）"
+read_layer_action = "none"
+note = "0 字节 CSV（连表头都没有）：厂商导出缺陷，该股当天其他两流正常。2026-09-02 用户裁定：登记进收据 empty_files，该标的不进该 stream；V1 静默排除。stream = 已观测到的流；新观测加 days"
+
+[[defect]]
+id = "D010"
+code = "no_trailing_comma"
+kind = "shape"
+days = [
+  2024-11-27, 2026-01-30, 2026-02-02, 2026-02-03, 2026-02-04, 2026-02-05,
+  2026-02-06, 2026-02-09, 2026-02-11, 2026-02-13, 2026-02-24, 2026-02-25,
+  2026-02-26, 2026-02-27, 2026-03-02, 2026-03-03, 2026-03-04, 2026-03-05,
+  2026-03-06, 2026-03-09, 2026-03-10, 2026-03-11, 2026-03-12, 2026-03-13,
+  2026-03-16, 2026-03-17, 2026-03-18, 2026-03-19, 2026-03-20, 2026-03-23,
+  2026-03-24, 2026-03-25, 2026-03-26, 2026-03-27, 2026-03-30, 2026-04-01,
+  2026-04-02, 2026-04-03, 2026-04-07, 2026-04-08, 2026-04-09, 2026-04-10,
+  2026-04-13, 2026-04-14, 2026-04-15, 2026-04-16, 2026-04-17, 2026-04-20,
+  2026-04-21, 2026-04-22, 2026-04-23, 2026-04-24, 2026-04-27, 2026-04-28,
+  2026-04-29, 2026-04-30,
+]
+status = "active"
+created_at = 2026-09-02
+evidence = "V1 manifest n_cols（orders 11 / trades 13 / xinqing 67）+ 盘口不变量抽验（design-log/2026-09-02-V1入库程序复审.md）"
+read_layer_action = "none"
+note = "三条流各少尾逗号幽灵列，语义未错位；枚举空值是 null 而非空格——读取层保持原值，下游把 ' ' / '' / null 视为同一无值"
+
+[[defect]]
+id = "D011"
+code = "stream_symbol_mismatch"
+kind = "defect"
+days = [2023-08-07, 2023-08-10, 2023-08-11, 2025-07-31, 2025-08-04]
+status = "active"
+created_at = 2026-09-02
+evidence = "V1 manifest n_symbols（orders ≠ trades）+ 标的集合差（design-log/2026-09-02-V1入库程序复审.md 第三节）"
+read_layer_action = "gap"
+note = "非救援日标的级单边缺失：有成交无委托（601099.SH / 000716.SZ / 000953.SZ / 001221.SZ 等）或只有行情。无 7z，原因不可考。守卫是标的级：读取层按 stream 给 SYMBOL_ABSENT 缺口并转述本码"
+
+[[defect]]
+id = "D012"
+code = "leading_zero_time"
+kind = "shape"
+days = [
+  2026-04-01, 2026-04-02, 2026-04-03, 2026-04-07, 2026-04-08, 2026-04-09,
+  2026-04-10, 2026-04-13, 2026-04-14, 2026-04-15, 2026-04-16, 2026-04-17,
+  2026-04-20, 2026-04-21, 2026-04-22, 2026-04-23, 2026-04-24, 2026-04-27,
+  2026-04-28, 2026-04-29, 2026-04-30,
+]
+status = "active"
+created_at = 2026-09-02
+evidence = "design-log/2026-09-02-时间形状扫描.tsv（8 位占比 0 的天，三条流一致）"
+read_layer_action = "none"
+note = "时间全带前导零（其余天 8 位占 13%–43%）。202604 导出程序指纹：与 no_trailing_comma、扁平布局同批。解码不受影响"
+
+[[defect]]
+id = "D013"
+code = "duplicate_open_frame"
+kind = "shape"
+stream = "xinqing"
+status = "active"
+created_at = 2026-09-02
+evidence = "docs/数据表.html 第六节 A 组（V1 window_factors 去重原文）"
+read_layer_action = "none"
+note = "供应商在 09:30 / 13:00 每股各发两帧重复开盘快照。preserve 不删行；事件提取的切割规则必须处理（事件注册表）"
