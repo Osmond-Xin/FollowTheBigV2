@@ -282,7 +282,7 @@
         <td><strong class="hit">6 位 HHMMSS 时间戳</strong><br><span class="note">厂商格式漂移，preserve 忠实保留</span></td>
         <td class="hit">共享的时段过滤原语用 <span class="m">t &lt; 93000000</span> 判断 ⇒ <strong>那天所有 SH 行被静默剔除，连续竞价段变成 SZ-only，不报错</strong>。该原语 <strong>fan-in = 56 个文件</strong></td>
         <td class="c">pl.col('column_4')<br>.str.len_bytes().min()<br><span class="note">合法只有 8 或 9；≤7 即污染</span><br><span class="key">已双向验证</span></td>
-        <td>20240206 / 20240208，<strong>只在 xinqing</strong>（各约 740 万行 5/6 位与 8/9 位混在同一文件；orders / trades 那两天全是 8/9 位）。2026-09-02 全语料扫描进行中（已扫 2022-01 → 2024-12：其余天三条流只有 8 与 9 位）</td>
+        <td>20240206 / 20240208，<strong>只在 xinqing</strong>（各约 740 万行 5/6 位与 8/9 位混在同一文件；orders / trades 那两天全是 8/9 位）。<strong>2026-09-02 全语料扫描完成</strong>：1122 天 × 3 流、2,300 亿行、零错误，时间串长度只有 5 / 6 / 8 / 9 四种，5/6 位仅此两天此一流。证据 <span class="m">design-log/2026-09-02-时间形状扫描.tsv</span>；账本 D001 已收窄到 xinqing</td>
       </tr>
       <tr>
         <td><strong>成交编号整列空 / 稀疏重复键</strong><br><span class="note">厂商侧缺陷，从源重下仍空</span></td>
@@ -322,7 +322,7 @@
       </tr>
       <tr>
         <td><strong>无尾逗号（少一列）</strong><br><span class="note">另一批导出程序；良性</span></td>
-        <td>三条流各少尾逗号幽灵列（orders 11 / trades 13 / xinqing 67 列 + _symbol），语义未错位（盘口不变量成立率与正常日相同）。但这些天<strong>枚举空值是 null 而非空格</strong>——读取层保持原值，下游须把 <span class="m">' '</span>、<span class="m">''</span>、null 视为同一个「无值」</td>
+        <td>三条流各少尾逗号幽灵列（orders 11 / trades 13 / xinqing 67 列 + _symbol），语义未错位（盘口不变量成立率与正常日相同）。但这些天<strong>枚举空值是 null 而非空格</strong>——读取层保持原值，下游须把 <span class="m">' '</span>、<span class="m">''</span>、null 视为同一个「无值」。其中 <strong>202604 的 21 天</strong>还是扁平布局且<strong>时间全带前导零（8 位占比 0）</strong>，是一个完整的导出程序指纹；其余 35 天仍有 8 位时间（每天 13%–43%）</td>
         <td class="c">manifest n_cols</td>
         <td>56 天：20241127 · 20260130 · 202602（12 天）· 202603（21 天）· 202604（21 天）</td>
       </tr>

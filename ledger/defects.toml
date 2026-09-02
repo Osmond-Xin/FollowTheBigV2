@@ -4,8 +4,9 @@
 [[defect]]
 id = "D001"
 code = "time_6digit"
+stream = "xinqing"
 days = [2024-02-06, 2024-02-08]
-note = "厂商格式漂移，同一文件混有 HHMMSS 与 HHMMSSmmm。全语料范围未知，扫描待跑；新发现的天必须加到这里"
+note = "厂商格式漂移，同一文件混有 HHMMSS / HMMSS 与 HHMMSSmmm / HMMSSmmm。2026-09-02 全语料扫描（1122 天 × 3 流，2300 亿行，design-log/2026-09-02-时间形状扫描.tsv）：只在这两天的 xinqing 出现（各约 740 万行），orders / trades 那两天正常；其余全语料时间串只有 8 与 9 位。新发现的天必须加到这里"
 
 [[defect]]
 id = "D002"
