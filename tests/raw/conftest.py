@@ -17,19 +17,14 @@ DAY = dt.date(2022, 1, 4)
 DAY6 = dt.date(2024, 2, 6)          # 账本登记了 time_6digit 的天
 DAY_RESCUE = dt.date(2026, 8, 5)    # 账本登记了 rescue_partial 的天
 
-LEDGER_TOML = """
-[[defect]]
-code = "time_6digit"
-days = [2024-02-06]
+def ledger_toml(*entries: str) -> str:
+    """账本工厂：每个测试自己声明用哪几条，不共享一份写死的账本。"""
+    return "".join(f"[[defect]]\nid = \"D{i:03d}\"\n{e}\n\n" for i, e in enumerate(entries, 1))
 
-[[defect]]
-code = "rescue_partial"
-days = [2026-08-05]
 
-[[defect]]
-code = "nul_sentinel_sh"
-stream = "trades"
-"""
+TIME6 = 'code = "time_6digit"\ndays = [2024-02-06]'
+RESCUE = 'code = "rescue_partial"\ndays = [2026-08-05]'
+NUL = 'code = "nul_sentinel_sh"\nstream = "trades"'
 
 
 def order_row(symbol: str, time: str, oid: str = "1", typ: str = "0", side: str = "B",
@@ -60,7 +55,12 @@ def write_preserve(root: Path, stream: str, day: dt.date, rows: list[dict[str, s
 
 @pytest.fixture
 def ledger() -> DefectLedger:
-    return parse_ledger(LEDGER_TOML)
+    return parse_ledger(ledger_toml(TIME6, RESCUE, NUL))
+
+
+@pytest.fixture
+def empty_ledger() -> DefectLedger:
+    return parse_ledger(ledger_toml())
 
 
 @pytest.fixture

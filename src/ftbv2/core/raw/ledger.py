@@ -7,11 +7,12 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import tomllib
 from dataclasses import dataclass
 from enum import Enum
 
-from ftbv2.core.raw.schema import Stream
+from ftbv2.core.raw.schema import STREAMS, Stream
 
 
 class DefectCode(Enum):
@@ -26,6 +27,7 @@ class DefectCode(Enum):
 
 @dataclass(frozen=True)
 class Defect:
+    id: str                        # 稳定标识；账本 append-only：改一条 = 新增一条并 supersedes 旧 id（CI 门禁待建，纪律先立）
     code: DefectCode
     stream: Stream | None          # None = 三个 stream 都受影响
     days: tuple[dt.date, ...]      # 空元组 = 结构性、对所有天成立（如 NUL 哨兵、int32 溢出）
@@ -35,6 +37,7 @@ class Defect:
 @dataclass(frozen=True)
 class DefectLedger:
     entries: tuple[Defect, ...]
+    sha256: str                    # 账本文本的内容哈希，进 ScanPlan / 证据指纹
 
     def for_day(self, day: dt.date, stream: Stream) -> tuple[Defect, ...]:
         """该天该 stream 登记在案的缺陷（含全天性条目），顺序 = 账本顺序。"""
@@ -51,14 +54,23 @@ def parse_ledger(text: str) -> DefectLedger:
     """解析 defects.toml 文本。格式：
 
     [[defect]]
+    id = "D001"              # 必填、唯一
     code = "time_6digit"
     stream = "orders"        # 可省略 = 全部 stream
-    days = ["2024-02-06"]    # 可省略 = 结构性
+    days = [2024-02-06]      # 可省略 = 结构性
     note = "…"
     """
     data = tomllib.loads(text)
     entries = []
+    seen: set[str] = set()
     for row in data.get("defect", []):
+        ident = str(row["id"])
+        if ident in seen:
+            raise ValueError(f"账本 id 重复：{ident}")
+        seen.add(ident)
         days = tuple(dt.date.fromisoformat(str(d)) if not isinstance(d, dt.date) else d for d in row.get("days", []))
-        entries.append(Defect(DefectCode(row["code"]), row.get("stream"), days, row.get("note", "")))
-    return DefectLedger(tuple(entries))
+        stream = row.get("stream")
+        if stream is not None and stream not in STREAMS:
+            raise ValueError(f"账本里未知的 stream {stream!r}（合法值 {STREAMS}）")
+        entries.append(Defect(ident, DefectCode(row["code"]), stream, days, row.get("note", "")))
+    return DefectLedger(tuple(entries), hashlib.sha256(text.encode("utf-8")).hexdigest())

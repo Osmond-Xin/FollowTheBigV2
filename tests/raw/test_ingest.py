@@ -60,12 +60,13 @@ def archive(tmp_path):
 def test_ingest_writes_preserve_layout_and_receipt(archive, root, ledger):
     r = ingest(DAY, archive, root)
     assert r.day == DAY and {s.stream for s in r.streams} == {"orders", "trades", "xinqing"}
-    assert r.dropped_by_prefix == {"300": 1}
+    assert r.symbols_by_exchange == {"SZ": 3, "SH": 1}                     # 全部保留，300001.SZ 没有被筛掉
+    assert len(r.archive_sha256) == 64 and r.sevenzip_version
     for s in r.streams:
-        assert s.n_symbols == 3 and s.n_rows_csv == s.n_rows_parquet == 6
+        assert s.n_symbols == 4 and s.n_rows_csv == s.n_rows_parquet == 10
         assert s.header == HEADER[s.stream]
         meta = pq.read_metadata(root / s.stream / f"date={DAY:%Y%m%d}.parquet")
-        assert meta.num_rows == 6
+        assert meta.num_rows == 10
     assert (root / "manifest" / f"{DAY:%Y%m%d}.json").exists()
 
 
@@ -79,7 +80,7 @@ def test_ingest_columns_are_column_n_large_string_plus_symbol(archive, root, led
 def test_ingest_sorted_by_symbol_and_row_order_kept(archive, root, ledger):
     ingest(DAY, archive, root)
     t = pl.read_parquet(root / "orders" / f"date={DAY:%Y%m%d}.parquet", columns=["_symbol", "column_4"])
-    assert t["_symbol"].to_list() == ["000001.SZ"] * 2 + ["000002.SZ"] + ["600000.SH"] * 3
+    assert t["_symbol"].to_list() == ["000001.SZ"] * 2 + ["000002.SZ"] + ["300001.SZ"] * 4 + ["600000.SH"] * 3
     assert t.filter(pl.col("_symbol") == "600000.SH")["column_4"].to_list() == ["093000000", "093001000", "093002000"]
 
 
@@ -97,6 +98,42 @@ def test_ingest_row_group_size_matches_existing_files(tmp_path, root, ledger):
     ingest(DAY, big, root)
     meta = pq.read_metadata(root / "orders" / f"date={DAY:%Y%m%d}.parquet")
     assert meta.num_row_groups == 2 and meta.row_group(0).num_rows == ROW_GROUP_ROWS
+
+
+def test_ingest_trailing_blank_lines_do_not_count(tmp_path, root, ledger):
+    src = tmp_path / "src" / f"{DAY:%Y%m%d}" / "000001.SZ"
+    src.mkdir(parents=True)
+    for stream, name in CSV_NAME.items():
+        body = "\r\n".join([HEADER[stream], *_csv_rows(stream, "000001.SZ", 2)]) + "\r\n\r\n\r\n"
+        (src / name).write_bytes(body.encode("gbk"))
+    archive = tmp_path / "t.7z"
+    subprocess.run(["7zz", "a", "-bso0", "-bsp0", str(archive), f"{DAY:%Y%m%d}"], cwd=src.parent.parent, check=True)
+    r = ingest(DAY, archive, root)
+    assert all(s.n_rows_csv == s.n_rows_parquet == 2 for s in r.streams)
+
+
+def test_ingest_rejects_changed_archive_for_same_day(tmp_path, root, ledger):
+    a1 = make_archive(tmp_path / "a", {"000001.SZ": 1})
+    a2 = make_archive(tmp_path / "b", {"000001.SZ": 2})
+    ingest(DAY, a1, root)
+    with pytest.raises(RuntimeError, match="sha256|归档"):
+        ingest(DAY, a2, root)
+
+
+def test_ingest_rejects_path_traversal_entries(tmp_path, root, ledger):
+    """归档里带 ../ 的条目必须整体拒绝，root 不得有任何改动。"""
+    evil = tmp_path / "evil"
+    (evil / "x").mkdir(parents=True)
+    (evil / "x" / "manifest.json").write_text("{}")
+    archive = tmp_path / "evil.7z"
+    subprocess.run(["7zz", "a", "-bso0", "-bsp0", "-spf2", str(archive), "x/../../evil/x/manifest.json"], cwd=evil, check=True)
+    names = subprocess.run(["7zz", "l", "-slt", "-ba", str(archive)], capture_output=True, text=True, check=True).stdout
+    if ".." not in names:
+        pytest.skip("本机 7zz 会规范化路径，造不出穿越条目")
+    before = sorted(p.relative_to(root) for p in root.rglob("*"))
+    with pytest.raises(RuntimeError):
+        ingest(DAY, archive, root)
+    assert sorted(p.relative_to(root) for p in root.rglob("*")) == before
 
 
 def test_ingest_is_idempotent_and_atomic(archive, root, ledger):

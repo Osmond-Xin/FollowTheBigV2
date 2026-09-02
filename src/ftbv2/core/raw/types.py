@@ -1,8 +1,9 @@
-"""原始层接口上的类型。接口 = 调用者必须知道的一切：不变量与错误模式写在各类型的 docstring 里。"""
+"""原始层接口上的类型。接口 = 调用者必须知道的一切：不变量、校验与错误模式写在各类型的 docstring 与 __post_init__ 里。"""
 
 from __future__ import annotations
 
 import datetime as dt
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -16,31 +17,42 @@ if TYPE_CHECKING:
 Day = dt.date
 """交易日。文件名 date=YYYYMMDD.parquet 由它派生；接口上只用 date，不用字符串。"""
 
+MS_PER_DAY = 86_400_000
+SYMBOL_RE = re.compile(r"^\d{6}\.(SZ|SH)$")
+
 
 @dataclass(frozen=True)
 class Window:
-    """自午夜起的毫秒半开区间 [start_ms, end_ms)。时间列在文件里是字符串、statistics 按字典序
-    （rg0 的 min/max 是 ('100000040','95959440')，min > max），**时间窗永远不能下推**，只能扫描后过滤。"""
+    """自午夜起的毫秒半开区间 [start_ms, end_ms)，0 ≤ start < end ≤ 86_400_000，否则 ValueError。
+    时间列在文件里是字符串、statistics 按字典序（rg0 的 min/max 是 ('100000040','95959440')，min > max），
+    **时间窗永远不能下推**，只能扫描后过滤。"""
 
     start_ms: int
     end_ms: int
 
+    def __post_init__(self) -> None:
+        if not (0 <= self.start_ms < self.end_ms <= MS_PER_DAY):
+            raise ValueError(f"非法时间窗 [{self.start_ms}, {self.end_ms})")
 
-CONTINUOUS: tuple[Window, Window] = (
+
+CONTINUOUS_EXCL_AUCTIONS: tuple[Window, Window] = (
     Window((9 * 3600 + 30 * 60) * 1000, (11 * 3600 + 30 * 60) * 1000),
     Window(13 * 3600 * 1000, (14 * 3600 + 57 * 60) * 1000),
 )
-"""连续竞价 = 上午段 ∪ 下午段（剔除集合竞价与午休）。与 schema.AM_START_MS 等同源。"""
+"""连续竞价两段 [09:30, 11:30) ∪ [13:00, 14:57)。**显式剔除**了 09:15–09:30 开盘集合竞价、11:30–13:00 午休、
+14:57–15:00 收盘集合竞价。集合竞价里的撤单与虚假撮合本身是研究对象：要它们就传 windows=None 或自定义窗，
+两种样本不同，预注册必须写明用的是哪个。与 schema.AM_START_MS 等同源。"""
 
 
 @dataclass(frozen=True)
 class ReadRequest:
-    """一次读取的全部意图。
+    """一次读取的全部意图。构造时校验，非法即 ValueError：
 
-    - days：要读的交易日，缺文件不是错误而是 Gap（见 ReadResult.gaps）；
-    - symbols：None = 全部；给定时按 _symbol 下推裁剪 row group（文件已全局按 _symbol 排序且 statistics 完好）；
-    - fields：语义字段名（schema.FIELDS）或 "raw:column_N"；顺序即输出列顺序；symbol 不必列出，总在首列；
-    - windows：时间窗，None = 全天；多个窗取并集；需要 time 列参与过滤时计划会内部扩展投影，输出不含它。
+    - days：非空；缺文件不是错误而是 Gap；输出按 days 给定的顺序拼接；
+    - fields：非空，语义字段名（schema.FIELDS）；未登记名在 plan() 时 KeyError；顺序即输出列顺序；
+      day 与 symbol 是保留列，总在最前，不必列出；
+    - symbols：None = 全部；给定时须非空且每个匹配 ^\\d{6}\\.(SZ|SH)$；按 _symbol 下推裁剪 row group；
+    - windows：None = 全天；给定时非空，多个窗取并集；过滤所需的时间列由计划内部扩展投影，输出不含它。
     """
 
     stream: Stream
@@ -48,6 +60,20 @@ class ReadRequest:
     fields: tuple[str, ...]
     symbols: frozenset[str] | None = None
     windows: tuple[Window, ...] | None = None
+
+    def __post_init__(self) -> None:
+        if not self.days:
+            raise ValueError("days 不能为空")
+        if not self.fields:
+            raise ValueError("fields 不能为空")
+        if self.symbols is not None:
+            if not self.symbols:
+                raise ValueError("symbols 为空集：全部请用 None")
+            bad = sorted(s for s in self.symbols if not SYMBOL_RE.match(s))
+            if bad:
+                raise ValueError(f"非法标的代码 {bad}")
+        if self.windows is not None and not self.windows:
+            raise ValueError("windows 为空元组：全天请用 None")
 
 
 @dataclass(frozen=True)
@@ -81,46 +107,52 @@ class Catalog:
 
 @dataclass(frozen=True)
 class FilePlan:
+    """一个文件的扫描计划。row_groups 带完整元数据，execute 统计字节数时不必再解析 footer。"""
+
     path: Path
     day: Day
-    row_groups: tuple[int, ...] | None   # None = 全部；否则只读这些（按 _symbol statistics 裁剪）
-    columns: tuple[str, ...]             # 物理投影，可能比输出多（过滤或补丁所需），返回前裁掉
+    columns: tuple[str, ...]                 # 物理投影，可能比输出多（过滤或补丁所需），返回前裁掉
+    row_groups: tuple[RowGroupMeta, ...]     # 要读的 row group（未裁剪时 = 全部）
+    pruned: bool                             # 是否按 _symbol statistics 裁剪过
+    patches: tuple[str, ...]                 # 缺陷账本为**这一天这个 stream** 触发的补丁代码，按文件隔离
+    total_row_groups: int
+    total_bytes: int
 
 
 @dataclass(frozen=True)
 class ScanPlan:
-    """纯函数 plan() 的产出。CI 在不碰数据时断言它的性质：
-    passes == 1 · pre_buffer is True · 给了 symbols 就有 row group 裁剪 · 列子集最小 · 时间窗只在 post_filters。"""
+    """纯函数 plan() 的产出。CI 在不碰数据时断言：每个文件只出现一次（单趟）· 给了 symbols 就裁剪 ·
+    列子集最小 · 时间窗只在 post_filters · 补丁按文件隔离。执行器怎么读（pyarrow、pre_buffer）是 RawStore 的
+    内部不变量，不是计划上的旋钮。"""
 
     request: ReadRequest
-    files: tuple[FilePlan, ...]
-    output_fields: tuple[str, ...]       # 输出列顺序：symbol 在首，其后按 request.fields
-    post_filters: tuple[str, ...]        # 扫描后过滤的描述，取值 {"symbol_exact", "window"}
-    patches: tuple[str, ...]             # 由缺陷账本触发的补丁代码（见 ledger.py），按天可能不同
-    passes: int = 1
-    pre_buffer: bool = True
-    engine: str = "pyarrow"
+    files: tuple[FilePlan, ...]              # 顺序 = request.days 顺序（缺的天跳过）
+    output_fields: tuple[str, ...]           # ("day", "symbol", *request.fields 去重)
+    post_filters: tuple[str, ...]            # 取值 {"symbol_exact", "window"}
+    ledger_sha256: str                       # 计划所依据的缺陷账本内容哈希：账本一变，同一份数据的结果可以不同，必须可归因
 
 
 class GapReason(Enum):
     DAY_MISSING = "day_missing"            # 该天没有这个 stream 的文件
-    SYMBOL_ABSENT = "symbol_absent"        # 请求的标的当天在文件里不存在
-    STREAM_PARTIAL = "stream_partial"      # 缺陷账本登记的救援日：该标的在别的 stream 有、在这个没有
+    SYMBOL_ABSENT = "symbol_absent"        # 请求的标的当天在这个 stream 的文件里不存在
 
 
 @dataclass(frozen=True)
 class Gap:
-    """缺口是一等公民，必须带归因码；它是下游纯核入口的必需参数，接口里没有 ignore_missing。"""
+    """缺口是一等公民，必须带归因码；它是下游纯核入口的必需参数，接口里没有 ignore_missing。
+    defects = 缺陷账本为该天该 stream 登记的缺陷码（如 rescue_partial）——只转述账本，不偷读别的 stream。"""
 
     day: Day
     stream: Stream
     reason: GapReason
     symbol: str | None = None
+    defects: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class ReadStats:
-    """让「338× 字节削减」可观测：单标的一天只碰 680 个 row group 里的 2 个。"""
+    """观测辅助，让「338× 字节削减」可见（单标的一天只碰 680 个 row group 里的 2 个）。
+    数值来自 footer 元数据，不作为正确性判据。"""
 
     row_groups_total: int
     row_groups_read: int
@@ -131,7 +163,7 @@ class ReadStats:
 
 @dataclass(frozen=True)
 class ReadResult:
-    frame: pl.DataFrame     # 列 = plan.output_fields，dtype 按 schema.Kind，行序 = 文件序
+    frame: pl.DataFrame     # 列 = plan.output_fields；day 为 pl.Date，其余 dtype 按 schema.Kind；行序 = 文件序
     gaps: tuple[Gap, ...]
     stats: ReadStats
 
@@ -141,23 +173,25 @@ class Quality(Enum):
 
     VERIFIED_BYTE_EXACT = "verified_byte_exact"   # 幸存 7z 覆盖的约 23%（2022 全年 + 202608）且已比对
     SELF_CONSISTENT = "self_consistent"           # 只验证了 preserve 层自洽
-    UNVERIFIED = "unverified"
+    UNVERIFIED = "unverified"                     # 没有 manifest 记录
 
 
 @dataclass(frozen=True)
 class StreamReceipt:
     stream: Stream
     n_symbols: int
-    n_rows_csv: int         # 独立计数：CSV 字节流里的换行数减表头，不是从 parquet 反推
+    n_rows_csv: int         # 独立计数：CSV 里表头之后的非空行数，不是从 parquet 反推
     n_rows_parquet: int
-    header: str             # CSV 首行原文（GBK 解码），让列语义从公理变成数据
+    header: str             # CSV 首行原文（GBK 解码，去掉行尾换行），让列语义从公理变成数据
     parquet_bytes: int
-    sha256_csv: str         # 全部 CSV 按标的顺序拼接的 sha256
+    sha256_csv: str         # 规范帧的 sha256：按标的升序，每个标的贡献 symbol\\0header\\0body 三段（含长度前缀）
 
 
 @dataclass(frozen=True)
 class IngestReceipt:
     day: Day
     archive: Path
+    archive_sha256: str                     # 幂等判据的一部分：同一天换一个归档必须失败，不能静默返回旧 receipt
+    sevenzip_version: str
     streams: tuple[StreamReceipt, ...]      # 三个 stream 齐全才算完成
-    dropped_by_prefix: dict[str, int] = field(default_factory=dict)   # 前缀 → 被宇宙筛选丢弃的标的数
+    symbols_by_exchange: dict[str, int] = field(default_factory=dict)   # "SZ" / "SH" → 标的数，全部保留，没有筛选

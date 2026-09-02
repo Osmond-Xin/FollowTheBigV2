@@ -22,8 +22,7 @@ SYMBOL_COL = "_symbol"          # preserve 文件里标识行所属标的的列�
 PRICE_SCALE = 10_000            # 价格 = 元 × 10000 整数定点（数据表第三节；20220104 茅台 ask1 锚点）
 ROW_GROUP_ROWS = 122_880        # 与现有 preserve 文件一致（数据表第二节实测），单标的一天只碰约 2 个 row group
 
-# 标的宇宙：主板前缀（立项讨论 Q15；V1 utils/constants.py:32）。宇宙属于预注册，这里只是摄取时的前缀筛选
-MAIN_PREFIXES: tuple[str, ...] = ("000", "001", "002", "003", "600", "601", "603", "605")
+# 标的宇宙不在这里：样本宇宙属于预注册（词汇表）。摄取保留归档里的全部标的；V1 按主板前缀删行是 F182 模式，V2 不重复。
 
 # 连续竞价时段（毫秒自午夜起）。V1 constants: T_AM_START=93000000 等 HHMMSSmmm 整数，这里换算成 ms
 AM_START_MS = (9 * 3600 + 30 * 60) * 1000      # 09:30:00.000
@@ -82,15 +81,8 @@ FIELDS: dict[Stream, tuple[Field, ...]] = {
     ),
 }
 
-RAW_PREFIX = "raw:"
-"""未登记列的旁路：字段名 "raw:column_13" 以 kind="str" 原样返回。用于日后登记新列前的探查；
-不得在因子里使用（未登记的形状硬失败是原始层存储的不变量，旁路只给人看）。"""
-
-
 def field(stream: Stream, name: str) -> Field:
-    """按语义名取字段；未登记名抛 KeyError（不是静默返回 None）。"""
-    if name.startswith(RAW_PREFIX):
-        return Field(name, name[len(RAW_PREFIX):], "str")
+    """按语义名取字段；未登记名抛 KeyError（不是静默返回 None）。未登记列只能经 RawStore.inspect_raw 给人看。"""
     for f in FIELDS[stream]:
         if f.name == name:
             return f
