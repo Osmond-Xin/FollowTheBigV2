@@ -20,7 +20,7 @@ FollowTheBig（V1）的推倒重建。研究目标不变——从 A 股 Level-2 
 **设计阶段收口，仓库与门禁已立，尚未写一行业务代码。** 所有设计决策（Q1–Q18 + 红队后九条）见 `design-log/2026-09-01-立项讨论.md`；
 深模块评审的四条高优先级已采纳（`design-log/2026-09-01-深模块评审.md`），中低项待裁决。
 
-- 仓库：`github.com/Osmond-Xin/FollowTheBigV2`（私有）。**分支保护需要 GitHub Pro 或转公开**，目前 main 未受保护。
+- 仓库：`github.com/Osmond-Xin/FollowTheBigV2`（公开）。main 受 ruleset 保护：只能经 PR 合入，须通过 `gate` 检查，禁止 force-push 与删除。
 - 包：`src/ftbv2/core`（纯逻辑核）/ `src/ftbv2/io`（IO 层）。import-linter 硬拒 core → io。
 - 门禁：`bash tools/gate.sh`（ruff · import-linter · 私有 import · 禁用词 · pytest），CI 同一入口（`.github/workflows/gate.yml`）。
   **禁用词门禁当前红**：命中 5 处（V1 原文引用 + 词汇表渲染物），待裁决改文还是改豁免。
