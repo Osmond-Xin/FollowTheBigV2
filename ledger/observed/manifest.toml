@@ -1,6 +1,11 @@
-# 工具扫描的观测清单：观测到的 code 必须 ⊆ 账本 active 登记（tools/check_ledger.py check_observed）。
-# 每个观测文件（*.toml）写 codes = [...]；本清单记录扫描范围与输入哈希。收据规则（工程管束 R1）落地后 tool 改为收据 id。
-scanned_at = 2026-09-02
-tool = "scratchpad/time_shape_scan.py（待第 2 步工具化为 tools/scan_shapes.py）"
-input = "/Volumes/辛的硬盘/data/preserve 1122 天 × 3 流 column_4，V1 manifest 1120 天"
+# 观测批次清单（tools/check_ledger.py check_observed）：每个观测文件（codes = [...]）必须在此登记且哈希相符；
+# 观测 code ⊆ 账本 active 登记；基线里已有的批次不可改不可删，只能追加。收据规则落地后 scanner 改为收据 id。
+
+[[batch]]
+file = "time_shape_2026-09-02.toml"
+sha256 = "abb244ad71c5682adab5100b60b3ed1979f107db04f01d2a1500287e9859314f"
+scanner = "scratchpad/time_shape_scan.py（待第 2 步工具化为 tools/scan_shapes.py）+ V1 manifest 反查"
+scanner_sha256 = "6f9753d086474cd58df45cd387a741fd0413ab46c865599837e5368049be597c"
+input = "/Volumes/辛的硬盘/data/preserve 1122 天 × 3 流 column_4；输出 design-log/2026-09-02-时间形状扫描.tsv"
 input_sha256 = "e58aeb7bf2172e3fc5eae70ac5de517f865cb8d18f35a52367bc610dfdca9053"
+scanned_at = 2026-09-02
