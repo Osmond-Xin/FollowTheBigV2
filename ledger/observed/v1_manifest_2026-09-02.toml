@@ -1,0 +1,2 @@
+# 2026-09-02 用 V1 preserve manifest.parquet 反查观测到的形状（design-log/2026-09-02-V1入库程序复审.md 第三节）
+codes = ["no_trailing_comma", "stream_symbol_mismatch", "quote_only", "empty_file", "rescue_partial"]

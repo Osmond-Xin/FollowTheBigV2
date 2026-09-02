@@ -48,9 +48,10 @@ lens_of() { case "$1" in opencode|mmx) echo 方法论;; agy) echo 架构;; codex
 
 build_prompt() {  # $1=runner  $2=对象文件  $3=模式说明  → stdout
   cat "$LENS/$(lens_of "$1").md"; printf '\n\n%s\n\n%s\n\n' "$3" "$FORMAT"
-  if [ "$1" = mmx ]; then  # mmx 无文件系统：把词汇表注入；agy / codex 自己读仓库
-    printf '===== 项目词汇表（CONTEXT.md，术语裁决依据）=====\n'; cat "$REPO/CONTEXT.md"; printf '\n\n'
-  fi
+  case "$1" in mmx|agy)  # mmx 无文件系统；agy 无头模式任何 read_file 都被自动拒且整体不输出 ⇒ 都把词汇表注入，禁止读文件
+    printf '不要调用任何读文件 / 列目录 / 执行命令的工具：全部依据本提示词附带的内容审查；需要的上下文都已附上。\n\n'
+    printf '===== 项目词汇表（CONTEXT.md，术语裁决依据）=====\n'; cat "$REPO/CONTEXT.md"; printf '\n\n';;
+  esac
   printf '===== 对象开始（以下全部是被审内容）=====\n'; cat "$2"; printf '\n===== 对象结束 =====\n'
 }
 

@@ -1,11 +1,21 @@
-# 观测批次清单（tools/check_ledger.py check_observed）：每个观测文件（codes = [...]）必须在此登记且哈希相符；
-# 观测 code ⊆ 账本 active 登记；基线里已有的批次不可改不可删，只能追加。收据规则落地后 scanner 改为收据 id。
+# 观测批次清单（tools/check_ledger.py check_observed）：观测文件（codes = [...]，文件名只能是 basename）必须在此登记且哈希相符；
+# 观测 code ⊆ 账本 active ∪ pending（观测先于裁决，所以 pending 也算已登记）；基线里已有的批次不可改不可删，只能追加。
+# scanner 以 tools/ 开头时门禁核对其内容哈希；external: 表示扫描器不在仓库（本轮 scratchpad 探针，第 2 步工具化后新批次改用 tools/）。
 
 [[batch]]
 file = "time_shape_2026-09-02.toml"
 sha256 = "abb244ad71c5682adab5100b60b3ed1979f107db04f01d2a1500287e9859314f"
-scanner = "scratchpad/time_shape_scan.py（待第 2 步工具化为 tools/scan_shapes.py）+ V1 manifest 反查"
+scanner = "external:scratchpad/time_shape_scan.py"
 scanner_sha256 = "6f9753d086474cd58df45cd387a741fd0413ab46c865599837e5368049be597c"
-input = "/Volumes/辛的硬盘/data/preserve 1122 天 × 3 流 column_4；输出 design-log/2026-09-02-时间形状扫描.tsv"
+input = "docs/design-log/2026-09-02-时间形状扫描.tsv"
 input_sha256 = "e58aeb7bf2172e3fc5eae70ac5de517f865cb8d18f35a52367bc610dfdca9053"
+scanned_at = 2026-09-02
+
+[[batch]]
+file = "v1_manifest_2026-09-02.toml"
+sha256 = "d10e14e13878aa11ea2fb50999c68a37730b6c110bba24203b43b51f912225dd"
+scanner = "external:scratchpad/（V1 manifest 反查，design-log/2026-09-02-V1入库程序复审.md 第三节的 polars 查询）"
+scanner_sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+input = "external:/Volumes/辛的硬盘/data/preserve/manifest.parquet"
+input_sha256 = "6a2bc2bb541e30f886ebd4b53b179d9ffa7ba056a02d5d8e45eef9730b374d07"
 scanned_at = 2026-09-02

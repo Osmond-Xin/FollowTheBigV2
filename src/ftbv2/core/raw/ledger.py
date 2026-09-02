@@ -45,7 +45,7 @@ KINDS = ("defect", "shape")
 STATUSES = ("pending", "active", "rejected", "superseded")
 LIVE = ("active", "pending")          # 进代码枚举的状态
 ACTIONS = ("patch", "gap", "none")
-REQUIRED = ("id", "code", "kind", "status", "created_at", "evidence", "read_layer_action")
+REQUIRED = ("id", "code", "kind", "status", "created_at", "evidence", "evidence_sha256", "read_layer_action")
 
 
 @dataclass(frozen=True)

@@ -18,7 +18,7 @@ DAY6 = dt.date(2024, 2, 6)          # 账本登记了 time_6digit 的天
 DAY_RESCUE = dt.date(2026, 8, 5)    # 账本登记了 rescue_partial 的天
 
 _DEFAULTS = {"kind": '"defect"', "status": '"active"', "created_at": "2026-09-01",
-             "evidence": '"夹具"', "read_layer_action": '"gap"'}
+             "evidence": '"夹具"', "evidence_sha256": '"' + "0" * 64 + '"', "read_layer_action": '"gap"'}
 
 
 def ledger_toml(*entries: str) -> str:

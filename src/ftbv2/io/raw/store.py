@@ -43,6 +43,9 @@ from ftbv2.core.raw.types import (
 )
 
 
+HANDLED_PATCHES = frozenset({"time_6digit"})   # 读取层真有处理器的补丁码；账本门禁的 KNOWN_PATCH_CODES 与之相等（测试断言）
+
+
 class RawStore:
     """root 下的布局：{root}/{stream}/date=YYYYMMDD.parquet，{root}/manifest/YYYYMMDD.json（V2 摄取写）。"""
 
@@ -83,6 +86,9 @@ class RawStore:
         present: dict[Day, frozenset[str]] = {}
         to_strip = [f.column for f in FIELDS[request.stream] if strip_columns(f)]
         for fp in plan.files:
+            unknown = sorted(set(fp.patches) - HANDLED_PATCHES)
+            if unknown:
+                raise RuntimeError(f"账本给 {fp.day:%Y-%m-%d} {request.stream} 的补丁码没有处理器：{unknown}（计划显示已触发，执行层绝不静默忽略）")
             raw = _read_row_groups(fp)
             raw = raw.with_columns([pl.col(c).str.strip_chars() for c in to_strip if c in raw.columns])   # 物化一次，见模块 docstring
             if time_column in raw.columns and "time_6digit" not in fp.patches and raw.select(short_time_present(time_column, pre_stripped=True)).item():
