@@ -134,3 +134,15 @@ def test_probe_density_rejects_an_unregistered_kind(tmp_path):
 @pytest.mark.parametrize("tool", ["tools/ingest_days.py", "tools/audit_preserve.py", "tools/scan_shapes.py", "tools/bench_read.py", "tools/probe_density.py"])
 def test_adapters_are_thin(tool):
     assert len((ROOT / tool).read_text(encoding="utf-8").splitlines()) <= 120
+
+
+def test_probe_density_reports_concentration(tmp_path):
+    """密度只回答「多不多」，集中度才回答「是不是庄的行为」：
+    庄做的是某只股票的某个阶段，大部分标的当天应当一条没有。夹具里零候选 ⇒ 零率 1.0。"""
+    root = _preserve(tmp_path)
+    r = run("tools/probe_density.py", "--root", str(root), "--kind", "LevelBuildThenVanish",
+            "--day", DAY.isoformat(), "--ledger", str(ROOT / "ledger" / "defects.toml"), cwd=tmp_path)
+    assert r.returncode == 0, r.stderr
+    con = json.loads(r.stdout)["concentration"]
+    assert con["zero_share"] == 1.0 and con["max_per_symbol"] == 0.0
+

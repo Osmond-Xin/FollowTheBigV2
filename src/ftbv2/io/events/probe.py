@@ -80,6 +80,7 @@ class DayProbe:
     seconds: float
     distributions: dict[str, list[dict[str, object]]]
     extra: dict[str, int]
+    concentration: dict[str, float]
 
     @property
     def input_rows(self) -> int:
@@ -106,6 +107,7 @@ class Probe:
     rows_per_symbol_day: float
     collapse_ratio: float
     invariants: tuple[str, ...]
+    concentration: dict[str, float]
 
     def measurement(self, evidence: EvidenceRef) -> DensityMeasurement:
         """把这批实测封成注册表准入用的实测记录。数字进收据，不进源码。"""
@@ -148,7 +150,17 @@ def probe(store: RawStore, ledger: DefectLedger, kind: str, days: tuple[Day, ...
         rows_per_symbol_day=candidates / symbol_days,
         collapse_ratio=input_rows / candidates if candidates else float("inf"),
         invariants=tuple(c.value for c in spec(kind).relation.invariants),
+        concentration=_pooled_concentration(per_day),
     )
+
+
+def _pooled_concentration(per_day: tuple[DayProbe, ...]) -> dict[str, float]:
+    """把逐日的集中度汇成一个数（按标的·日加权取平均）。逐日的差异仍留在 per_day 里。"""
+    got = [p.concentration for p in per_day if p.concentration]
+    if not got:
+        return {}
+    keys = ("zero_share", "top_decile_share", "max_per_symbol")
+    return {k: round(sum(c[k] for c in got) / len(got), 4) for k in keys}
 
 
 def _probe_one_day(store: RawStore, ledger: DefectLedger, kind: str, day: Day,
@@ -182,7 +194,36 @@ def _probe_one_day(store: RawStore, ledger: DefectLedger, kind: str, day: Day,
         seconds=round(time.time() - t0, 1),
         distributions=_summarise(kind, table),
         extra=built.extra,
+        concentration=_concentration(table, frames["orders"]["symbol"].n_unique()),
     )
+
+
+def _concentration(table: pl.DataFrame, n_symbols: int) -> dict[str, float]:
+    """事件在标的之间是**集中**还是**摊平**。
+
+    **这是「是不是庄的行为」的判据，密度只回答「多不多」。** 庄做的是某只股票的某个阶段，
+    所以它的痕迹应当：大部分标的当天一条没有；有的那些集中在少数标的上。
+    反过来——如果每只股票每天都以稳定频率出现，那它是市场的常态纹理，不是谁的痕迹。
+
+    - `zero_share` —— 当天一条都没有的标的占比。**泊松噪声在 λ=30 时它约等于 0**；
+      一个稀有的痕迹应当很高。
+    - `top_decile_share` —— 事件最多的那 10% 标的贡献了多少比例的事件。
+      完全摊平是 0.1，完全集中是 1.0。
+    - `max_per_symbol` —— 单个标的当天最多几条。
+    """
+    if n_symbols == 0:
+        return {}
+    per = (table.filter(pl.col("candidate")).group_by("symbol").agg(pl.len().alias("n"))
+           .sort("n", descending=True))
+    total = int(per["n"].sum())
+    if total == 0:
+        return {"zero_share": 1.0, "top_decile_share": 0.0, "max_per_symbol": 0.0}
+    top_k = max(1, round(n_symbols * 0.1))
+    return {
+        "zero_share": round((n_symbols - per.height) / n_symbols, 4),
+        "top_decile_share": round(int(per["n"].head(top_k).sum()) / total, 4),
+        "max_per_symbol": float(per["n"].max()),
+    }
 
 
 # ------------------------------------------------------------------ 候选生成器（每条条目一个）
