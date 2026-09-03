@@ -358,50 +358,23 @@
   <h2>五 · 事件层</h2>
   <p class="note" style="max-width:68ch">事件层的作用：把 5,300 万行/天的逐笔数据坍缩成几万条结构记录，让日常研究彻底脱离 4 IOPS 的外置盘。预估 5–8 GB 常驻内置 SSD——<strong>这个数字是估算，尚未实测</strong>。定义落在注册表 <span class="m">ftbv2.core.registry</span>（纯逻辑核、进 CI、版本 0.1.0），<strong>不落在本表的文字里</strong>；本表只记落盘形态与不变量。</p>
 
-  <h3>第一批条目（注册表 0.1.0 · 每类一张表，表名 = <span class="m">kind</span>）</h3>
-  <p class="note" style="max-width:68ch">选择标准不是「便宜」，是<strong>每类提取器至少一条</strong>——只做段内型，第二批一来跨日型就得改接口。四条覆盖：区间/段内/单流 · 组/段内/单流 · 时刻/日内/多流 · 区间/跨日/读日级参考层。<strong>尚未在真实数据上跑过，预算列是拍的不是测的。</strong></p>
+  <h3>第一批条目（注册表 0.2.0 · 每类一张表，表名 = <span class="m">kind</span>）</h3>
+  <p class="note" style="max-width:70ch">选择标准不是「便宜」，是<strong>每类提取器至少一条</strong>。<strong>四条的密度全是「未实测」</strong>——这是诚实的未知，不是待办事项的委婉说法：<span class="m">require_density()</span> 会拦住任何未实测条目进入全量提取。上一版曾用两个拍出来的数（预算 / 期望条数）冒充约束，2026-09-03 审计后删除。</p>
   <div class="scroll"><table>
-    <thead><tr><th>kind（表名）</th><th>型</th><th>回看</th><th>stream</th><th>几何度量</th><th>预算 / 期望（条·标的·日）</th><th>语义别名</th></tr></thead>
+    <thead><tr><th>kind（表名）</th><th>型</th><th>回看</th><th>stream</th><th>跨行结构关系（角色 → 不变量）</th><th>几何度量</th><th>密度</th></tr></thead>
     <tbody>
-      <tr><td><span class="m">QuoteThenWithdraw</span></td><td>区间</td><td>段内</td><td>orders</td><td>side · price · vol · rest_ms · ticks_from_touch_at_cancel</td><td class="num">200,000 / 20,000</td><td>假墙撤单</td></tr>
-      <tr><td><span class="m">Seq_RepeatedSamePxVol</span></td><td>组</td><td>段内</td><td>orders</td><td>side · price · slice_vol · n_slices · span_ms</td><td class="num">50,000 / 2,000</td><td>冰山</td></tr>
-      <tr><td><span class="m">SnapshotRestGeqDisp</span></td><td>时刻</td><td>日内</td><td>xinqing + trades</td><td>side · price · displayed_vol · executed_vol</td><td class="num">100,000 / 5,000</td><td>隐藏深度</td></tr>
-      <tr><td><span class="m">VolClockBar</span></td><td>区间</td><td>跨日（<span class="m">lookback_days=20</span>，读 <span class="m">daily_ref.volume</span>）</td><td>trades</td><td>bar_index · volume · vwap · n_trades</td><td class="num">2,000 / 200</td><td>成交量时钟</td></tr>
-      <tr><td><span class="m">DayBoundary</span></td><td colspan="3"><strong>不是注册表条目</strong>——驱动层从 交易日历 × 标的主表 × 摄取收据的叉积产生</td><td>coverage_status · gap_codes · n_events · quiet_span_ms</td><td class="num">每 (标的,日) 恰好 1 条</td><td>日界 / 安静日</td></tr>
+      <tr><td><span class="m">LevelBuildThenVanish</span><br><span class="note">假墙</span></td><td>区间</td><td>日内</td><td>orders + trades</td><td>建墙委托 · 拆墙撤单 · 存续期间的成交 → 一批委托把档位从无堆到有，另一批撤单把它清回零并使该档位从盘口消失，<strong>且第三个角色为空集</strong>（一笔没成交）</td><td>side · price · peak_vol · n_orders · n_cancels · build_ms · life_ms · teardown_ms · ticks_from_touch_at_peak</td><td class="num">未实测</td></tr>
+      <tr><td><span class="m">RefillAfterFill</span><br><span class="note">冰山</span></td><td>组</td><td>日内</td><td>orders + trades</td><td>被成交耗尽的委托 · 耗尽它的成交 · 同价同量的补单 → 三者按时序咬合并至少重复一轮，<strong>补单必须发生在成交之后</strong></td><td>side · price · slice_vol · n_refills · total_filled · span_ms</td><td class="num">未实测</td></tr>
+      <tr><td><span class="m">FillExceedsDisplayed</span><br><span class="note">隐藏深度</span></td><td>时刻</td><td>日内</td><td>xinqing + trades</td><td>前帧该档展示量 · 两帧之间该档成交 · <strong>后帧该档仍然存在</strong> → 成交吃完了全部展示量而档位还活着，<strong>幸存本身就是隐藏的证据</strong></td><td>side · price · displayed_vol · executed_vol · surviving_vol</td><td class="num">未实测</td></tr>
+      <tr><td><span class="m">VolClockBar</span><br><span class="note">成交量时钟</span></td><td>区间</td><td>跨日<br><span class="m">lookback_days=20</span><br>读 <span class="m">daily_ref.volume</span></td><td>trades</td><td>bar 起点成交 · bar 内全部成交 · 跨过刻度的那一笔 → 累计量首次跨过 <span class="m">tick_volume</span> 即为终点</td><td>bar_index · volume · vwap · n_trades<br><span class="note">刻度 = 日均量 ÷ <span class="m">bars_per_day</span>=48</span></td><td class="num">可预测<br><span class="note">由 bars_per_day 控制</span></td></tr>
+      <tr><td><span class="m">DayBoundary</span><br><span class="note">日界 / 安静日</span></td><td colspan="4"><strong>不是注册表条目</strong>——驱动层从 交易日历 × 标的主表 × 摄取收据的叉积产生。<span class="m">coverage_status</span> 用 <span class="m">CoverageStatus</span> 枚举（covered / partial / absent），<span class="m">gap_codes</span> 复用缺陷账本的 <span class="m">DefectCode</span>（CI 已校验它等于账本 code 集合）</td><td>coverage_status · gap_codes · n_events · quiet_span_ms</td><td class="num">每 (标的,日) 恰好 1 条</td></tr>
     </tbody>
   </table></div>
 
-  <div class="warn"><span class="h">已知的体积风险：QuoteThenWithdraw</span>
-    <p>原种子名 <span class="m">QuoteThenWithdrawWithinT</span> 里的 <strong>T 是一个时间上界</strong>，与「边界由结构触发不由时间触发」直接冲突，2026-09-03 去掉。切割规则只留两个结构端点（挂出 / 被整笔撤销），<span class="m">rest_ms</span> 作为几何度量记录、<strong>不设上界</strong>；「几秒内撤才算假墙」搬到因子层。</p>
-    <p>代价是：<strong>每一笔被整笔撤销的委托都是一条事件</strong>。A 股撤单率不低，这条很可能是四条里最大的一张表。预算 20 万是拍的。第一片在 20 天产物上跑完拿真数字，超了就带着实测回来重议——<strong>不靠猜，靠量</strong>。这正是「事件流实际体积」这个必测数字要回答的问题。</p>
-  </div>
-
-  <div class="warn"><span class="h">定义事件时必须守的一条（2026-09-03 收口）</span>
-    <p><strong>事件 = 被结构规则切出的一段区间、一组委托、或一个时刻。</strong>提取器只回答「这里有一个这样的结构」，绝不回答「这个结构够不够大、算不算反常、是不是庄」。</p>
-    <p>提取一次要扫 2.585 TB（约 15 小时），判断一旦写进去就被锁死在一个极难重跑的位置。所以记录<strong>几何度量</strong>（方向、价、量、笔数、档位距离、时延、跨度），<strong>不记录分位、排名、语义标签，也不记这一段之外发生的事</strong>。判断留在因子层，那一层改起来是秒级的。</p>
-    <p>⚠️ <strong>不得用「反常」定义事件</strong>——取代此前「只回答这是不是统计上反常」的写法。「统计上反常」要有一个分布做参照，而分布是判断；若参照当日自身分布，09:35 的事件存不存在取决于 14:55，事件流的存在性本身就携带未来信息。</p>
-  </div>
-
-  <div class="ok"><span class="h">事件三型 · 回看范围四档（注册表每条必须声明，2026-09-03 用户裁定）</span>
-    <p><strong>事件三型</strong>（<span class="m">end_time</span> 含义各不相同，因子层不得一概当作「事情结束了」）：<strong>区间</strong>（起止之间那个东西确实存在着，如假墙）· <strong>组</strong>（一批离散记录被圈成整体，时间上未必连着，起止只是这组的头尾，如冰山）· <strong>时刻</strong>（无跨度，<span class="m">start_time == end_time</span>，如隐藏深度）。</p>
-    <p><strong>回看范围四档</strong>（提取器最远要往回看到哪）：<strong>段内</strong>（这段前后有界的几行）· <strong>日内</strong>（当天一整天，多流对齐属此档）· <strong>跨日</strong>（要 T−1 及以前的日级参考层，且写得出 <span class="m">lookback_days</span>）· <strong>周期</strong>（写不出一个数，由数据本身决定，可跨年）。分界不在看得远不远，在<strong>能不能事先写下一个常数</strong>。</p>
-    <p><strong>重跑代价随档递增</strong>：段内 / 日内型改了只重跑那一天；跨日型重跑那个窗口；<strong>周期型必须从语料起点全量重跑</strong>。</p>
-    <p>⚠️ <strong>周期型不产出事件行，产出日级参考层的列</strong>——周期尺度的量没有起止、每天都有值，是「现在处于什么处境」而不是「发生了什么」，<strong>处境不是事件</strong>。且这一档<strong>不许自己判定周期</strong>（「周期在这儿转了」与 p90 是同一类判断），只许记机械可累计的无界量。</p>
-  </div>
-
-  <div class="ok"><span class="h">边界由结构触发，不由时间触发（2026-09-03 用户裁定）</span>
-    <p>开一段、结一段只能被<strong>结构事件</strong>触发——出现一笔价或量不同的本方委托、方向反转、该笔委托被撤或成交完；不得写「隔了 T 久没动静就结段」。</p>
-    <p>理由：<strong>庄家不掐表，是子弹打光了或者量到了。</strong>时间阈值既是判断，也不符合被观测对象的行为。由此「最少几笔才算一组」不成问题——开组的规则是「出现同价同量的第 2 笔」，2 是「成组」的词义下限，不是阈值。</p>
-  </div>
-
-  <div class="ok"><span class="h">事件流的不变量（属于接口，因子的合成夹具与真实流都必须满足）</span>
-    <p>① 按 (标的, 时间) 有序——这是<strong>读时归并出来的视图</strong>，不是落盘形态。② <strong>每类事件各自一张表</strong>（几何度量逐类不同；合成宽表会让「新增一种事件」变成改 schema，与版本规则「新增事件类型 = minor 增量追加」冲突，逼出全量重跑）。③ <strong>每个 (标的, 交易日) 至少一条日界事件</strong>——不含几何度量，只标记该标的该日结束；没有任何结构的安静日也让因子状态机前进一步。④ <strong>安静 ≠ 缺口</strong>：安静 = 有数据、无结构（有日界事件）；缺口 = 数据不存在（无日界事件，必带归因码，是下游纯核入口的必需参数）。</p>
-    <p><strong>三类参数，各有唯一住所</strong>：切割规则所用的<strong>提取参数</strong>（<strong>只能是拓扑量</strong>：时间上界、笔数边、价位连续性边、离最优价的离散刻度边）→ 事件注册表，进证据指纹，假设不得修改；判断阈值与因子参数 → 预注册；白名单字面量 0 / 1 / −1。⚠️ 此处曾写「分位点」，与「提取参数只能是拓扑量」直接冲突，2026-09-03 删除。<strong>事件流版本</strong> = 注册表版本 + 提取参数集 + 数据清单摘要，每个假设必须声明。</p>
-  </div>
-
-  <div class="ok"><span class="h">驱动层怎么跑（注册表声明「要什么」，驱动层决定「怎么跑」）</span>
-    <p><strong>外层按日期升序，内层同一天内按标的并行。</strong>原始层按天存在 4 IOPS 的机械盘上，顺序扫是最快的读法——按天推进是被存储布局逼的，不是被跨日依赖逼的；<strong>跨日型要的 T−1 因此免费得到满足</strong>。四档回看范围一遍扫全部满足，不需要为并行砍掉任何一类事件。</p>
-    <p>日级参考层同趟写出：<strong>写</strong>它不需要读昨天（只是当天数据的汇总），<strong>读</strong> T−1 才制造跨日依赖——两者不可混为一谈。写完 day T 再进 day T+1，跨日型在 T+1 读到的就是完整的 T。冷启动（第一天、滚动窗不足）记缺口，不进事件流；周期型的冷启动缺口是<strong>「够不够未知」</strong>，不是「前 N 天不足」。</p>
+  <div class="warn"><span class="h">2026-09-03 审计：上一版的假墙与冰山是过滤，不是提取</span>
+    <p><strong>过滤</strong>挑出满足某属性的<strong>单条</strong>原始记录——行数少一点，信息密度一点没变，每条事件仍对应一条原始行，等于把 orders 表挪了个地方。<strong>提取</strong>找出<strong>多条</strong>原始记录之间的结构关系，把它们坍缩成一条。这才降维。</p>
+    <p>上一版 <span class="m">QuoteThenWithdraw</span>「一笔委托被整笔撤销」——撤单标志就写在那一行上，不必看任何别的行，坍缩比 1:1。上一版 <span class="m">Seq_RepeatedSamePxVol</span>「同价同量连着报两笔」——密集报单里满地都是，与是否成交无关，切出来的不是冰山。<strong>两条都只读 orders 一流：正因为没看成交，切出来的不是那个结构。</strong></p>
+    <p>结构性的防线（<span class="m">ftbv2.core.registry</span>，违反即构造失败）：<span class="m">Relation.roles</span> 至少两个角色（单行过滤只说得出一个）；<span class="m">Density.collapse_ratio</span> 必须 &gt; 1 且带收据（坍缩比要<strong>实测</strong>，1:1 会在数字上暴露，赖不掉）；<span class="m">Param.value</span> 必须是数而不是一句描述（上一版的刻度写成「日均值」，照它跑一天只有一根 bar，而 28 个测试全绿）。</p>
   </div>
 
   <h3>V1 最大的信息回收空间：事件本身从未被持久化</h3>

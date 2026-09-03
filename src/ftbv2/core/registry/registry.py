@@ -15,8 +15,9 @@ from enum import Enum
 from ftbv2.core.registry.seeds import DAY_BOUNDARY, SEEDS
 from ftbv2.core.registry.types import DayBoundarySpec, EventSpec, Param
 
-REGISTRY_VERSION = "0.1.0"
-"""注册表版本。第一批种子，尚未在真实数据上跑过。"""
+REGISTRY_VERSION = "0.2.0"
+"""注册表版本。0.2.0：2026-09-03 审计后重写切割规则（假墙与冰山由单行过滤改为跨行结构关系），
+按 major/minor/patch 规则，改切割算法 = major——0.x 阶段用 minor 位表达，第一片实测前不锁 1.0。"""
 
 _BY_KIND: dict[str, EventSpec] = {s.kind: s for s in SEEDS}
 if len(_BY_KIND) != len(SEEDS):
@@ -39,6 +40,12 @@ def spec(kind: str) -> EventSpec:
 def day_boundary() -> DayBoundarySpec:
     """日界事件的 schema。不是注册表条目（由驱动层产生），放在这里只为事实单源。"""
     return DAY_BOUNDARY
+
+
+def unmeasured() -> tuple[str, ...]:
+    """还没在真实数据上测过密度的条目。全量提取前这个列表必须为空——
+    「预算是拍的」必须在花掉 15 小时之前暴露，而不是之后。"""
+    return tuple(s.kind for s in SEEDS if s.density is None)
 
 
 def extraction_params() -> dict[str, tuple[Param, ...]]:
@@ -70,6 +77,8 @@ def _canonical(obj: EventSpec | DayBoundarySpec) -> dict[str, object]:
 def _plain(value: object) -> object:
     if isinstance(value, Enum):
         return value.value
+    if isinstance(value, type) and issubclass(value, Enum):      # Measure.enum_type：摘要绑住枚举的取值
+        return {"enum": value.__name__, "values": [m.value for m in value]}
     if isinstance(value, tuple):
         return [_plain(v) for v in value]
     return value
