@@ -150,3 +150,33 @@ def test_盘口重建产出注册表不变量要读的每一列() -> None:
                                  quote_levels(quotes))
     needed = set(spec("LevelBuildThenVanish").relation.required_columns())
     assert needed <= set(episodes.columns), sorted(needed - set(episodes.columns))
+
+
+def test_深度增量按时间排序而不是按分流的源行序() -> None:
+    """`ord` 是分流编号（orders 0…n−1，trades n…），单独拿它排会把「全部 orders 的行」
+    整体排到「全部 trades 的行」前面。次序必须是 (time_ms, ord)，与注册表的 TOTAL_ORDER 一致。"""
+    o = _orders(symbol=["000001.SZ"], side=["B"], price=[1000], time_ms=[10],
+                oid=[1], type=["0"], vol=[300])
+    t = pl.DataFrame({"symbol": ["000001.SZ"], "price": [1000], "time_ms": [5], "code": ["0"],
+                      "bs": ["S"], "vol": [100], "ask_ref": [0], "bid_ref": [9]}, schema=_T_SCHEMA)
+    got = depth_deltas(o, t).deltas
+    assert got["time_ms"].to_list() == [5, 10], "更早的成交必须排在更晚的委托前面"
+
+
+def test_两段独立的生命周期不得被并成一段() -> None:
+    """**这条是 2026-09-03 抓到的结构性 bug 的回归测试。**
+
+    深交所的撤单在 trades 流里。上一版只按 `ord` 排，于是「挂 300 → 撤 → 再挂 300 → 再撤」
+    这两段各自独立的档位生命周期，被并成了一段 peak 600、两笔委托两笔撤单的假象——
+    段数被少算、峰值被多算、笔数被多算。假墙的密度与形态都建在这上面。"""
+    o = _orders(symbol=["000001.SZ"] * 2, side=["B"] * 2, price=[1000] * 2, time_ms=[1, 10],
+                oid=[1, 2], type=["0"] * 2, vol=[300, 300])
+    t = pl.DataFrame({"symbol": ["000001.SZ"] * 2, "price": [0, 0], "time_ms": [5, 15],
+                      "code": ["C", "C"], "bs": [" ", " "], "vol": [300, 300],
+                      "ask_ref": [0, 0], "bid_ref": [1, 2]}, schema=_T_SCHEMA)
+    ep = level_episodes(depth_deltas(o, t).deltas).sort("ep")
+    assert ep.height == 2, f"两段独立的生命周期被并成了 {ep.height} 段"
+    assert ep["peak_vol"].to_list() == [300, 300], "峰值不得把两段叠加"
+    assert ep["n_adds"].to_list() == [1, 1] and ep["n_cancels"].to_list() == [1, 1]
+    assert ep["closed"].to_list() == [True, True]
+

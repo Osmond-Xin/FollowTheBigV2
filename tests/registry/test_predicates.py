@@ -123,3 +123,11 @@ def test_一手的重复挂单不是切片的证据() -> None:
     assert not _mask(InvariantCode.SLICE_EXCEEDS_MIN_LOT, slice_vol=LOT_SIZE)
     assert not _mask(InvariantCode.SLICE_EXCEEDS_MIN_LOT, slice_vol=LOT_SIZE - 1), \
         "零股是再切不下去的另一端，同样不是切片"
+
+
+def test_一个不干净的循环让整条链不算() -> None:
+    """「每个循环都是一笔委托被整个吃光」——**每个**，不是「大部分」。
+    链按幅度切、不按干净与否切，所以这条不变量真的会过滤（2026-09-03 换机制）。"""
+    assert _mask(InvariantCode.EVERY_CYCLE_ONE_ORDER_FULLY_EATEN, clean_cycles=3, n_cycles=3)
+    assert not _mask(InvariantCode.EVERY_CYCLE_ONE_ORDER_FULLY_EATEN, clean_cycles=2, n_cycles=3)
+

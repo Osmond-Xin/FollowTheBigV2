@@ -45,6 +45,15 @@ class InvariantCode(Enum):
     REFILL_STRICTLY_AFTER_FILL = "refill_strictly_after_fill"
     """补单的时刻严格晚于把前一片吃完的那笔成交。这是冰山与「密集报单里同价同量相邻」的分界。"""
 
+    EVERY_CYCLE_ONE_ORDER_FULLY_EATEN = "every_cycle_one_order_fully_eaten"
+    """本组每一个档位循环都是**一笔委托被成交整个吃光**：回到过零 · 只由一笔委托堆起来 ·
+    期间没有撤单 · 离场的量全部是成交。
+
+    **这一条替代了「账户身份」。** 冰山的机制是同一个人吃完一片补一片，而逐笔数据里没有身份；
+    要求档位**归零**，中间就没有别人，补上来的只能是同一个人。
+    2026-09-03 第一版拿「同价 + 同量」当身份，数出来 55–219 条/(标的·日)——
+    张三挂 300 被吃掉、李四十秒后也挂 300 就算一轮，两个毫不相干的人。"""
+
     SLICE_EXCEEDS_MIN_LOT = "slice_exceeds_min_lot"
     """每片的委托量超过一手（`core.raw.LOT_SIZE`）。**一手不能再切，所以一手的重复挂单
     不是切片的证据**——2026-09-03 实测：不加这一条，冰山 218.92 条/(标的·日)，
@@ -77,6 +86,8 @@ _TABLE: dict[InvariantCode, tuple[tuple[str, ...], Callable[[], pl.Expr]]] = {
     InvariantCode.BUILT_BY_MULTIPLE_ORDERS: (("n_adds",), lambda: pl.col("n_adds") >= 2),
     InvariantCode.REFILL_STRICTLY_AFTER_FILL: (
         ("refill_time_ms", "fill_time_ms"), lambda: pl.col("refill_time_ms") > pl.col("fill_time_ms")),
+    InvariantCode.EVERY_CYCLE_ONE_ORDER_FULLY_EATEN: (
+        ("clean_cycles", "n_cycles"), lambda: pl.col("clean_cycles") == pl.col("n_cycles")),
     InvariantCode.SLICE_EXCEEDS_MIN_LOT: (
         ("slice_vol",), lambda: pl.col("slice_vol") > LOT_SIZE),
     InvariantCode.FILL_REACHES_DISPLAYED: (

@@ -15,6 +15,12 @@
 这与红队 2026-09-03 的判断相反：它说上交所缺关联字段所以更难，实测是两边各有各的难处，且难在不同结构上。
 
 成交消耗的是**被动方**的深度：`trades.bs` 是主动方向，所以减的是它的反向。
+
+顺带一个实测事实（2026-09-03，收据在 design-log 冰山那篇）：上交所的 `trades` 行里
+**只有被动方那一边的号是委托号**（能在 orders 里找到），主动方那个不是；深交所两边都是。
+上一版据「单边 57% / 双边 14%」判定「上交所不可靠」，那是把主被动混在一起量的结果——
+按被动方量，两个市场都是 99.9%。这里不再需要这条关联（档位重建只看深度），
+记下来是因为它推翻过一个结论。
 """
 
 from __future__ import annotations
@@ -42,41 +48,44 @@ class DeltaResult:
 
 
 def depth_deltas(orders: pl.DataFrame, trades: pl.DataFrame) -> DeltaResult:
-    """把 orders 与 trades 归一成一条深度增量流：(symbol, side, price, time_ms, ord, oid, delta, reason)。
+    """把 orders 与 trades 归一成一条深度增量流：(symbol, side, price, time_ms, ord, delta, reason)。
 
-    `ord` 是源行序，作为同毫秒的稳定次序——没有它，同一毫秒的多笔在不同切分下会改变
-    「谁先把档位堆到零」，结果不可复现。
+    **次序是 (time_ms, ord)，与注册表声明的排序键 `TOTAL_ORDER` 一致。**
+    `ord` 是源行序，只作同毫秒的稳定次序——没有它，同一毫秒的多笔在不同切分下会改变
+    「谁先把档位堆到零」，结果不可复现。同毫秒内 orders 的行排在 trades 之前
+    （`ord` 给 trades 加了 orders 的行数作偏移），这是一个**声明出来的约定**：
+    一笔委托与吃掉它的成交落在同一毫秒时，委托必须先入簿。
+
+    ⚠️ **2026-09-03 修**：上一版只按 `ord` 排，没有 `time_ms`。而 `ord` 是**分流编号**
+    （orders 0…n−1，trades n…），于是一个档位上「全部 orders 的行」会整体排在
+    「全部 trades 的行」之前，时间顺序被打乱。后果不是抖动，是**结构性的**：
+    深交所的撤单在 trades 流里，所以「挂 300 → 撤 → 再挂 300 → 再撤」这两段独立的生命周期
+    会被并成**一段 peak 600、两笔委托两笔撤单**的假象。见 `test_两段独立的生命周期不得被并成一段`。
+
     `side` 统一为委托所在的方向（成交行已折算成被动方）。
 
-    **`oid` 是这一行说的是哪一笔委托**：新增与上交所撤单是它自己的委托号；深交所撤单是
-    被撤的那一笔（由 `_link_sz_cancels` 关联出来）；成交行是**被动方**的委托号
-    （`bs` 是主动方向，所以主买取 `ask_ref`、主卖取 `bid_ref`）。
-    冰山要判「某一笔本方委托被成交耗尽」，靠的就是这一列——**它在这里算一次，
-    不在下游各算一遍**：哪一行属于哪一笔委托，是两个交易所口径差异的一部分，
-    与 side / price 的归一同源。
     """
     o = orders.with_row_index("ord")
     t = trades.with_row_index("ord", offset=o.height)
     sh = pl.col("symbol").str.ends_with(_SH_SUFFIX)
 
     adds = o.filter(~sh | (pl.col("type") == "A")).select(
-        "symbol", "side", "price", "time_ms", "ord", "oid",
+        "symbol", "side", "price", "time_ms", "ord",
         pl.col("vol").alias("delta"), pl.lit(_ADD).alias("reason"))
     sh_cancels = o.filter(sh & (pl.col("type") == "D")).select(
-        "symbol", "side", "price", "time_ms", "ord", "oid",
+        "symbol", "side", "price", "time_ms", "ord",
         (-pl.col("vol")).alias("delta"), pl.lit(_CANCEL).alias("reason"))
 
     executed = t.filter(pl.col("code") != "C").select(
         "symbol", pl.when(pl.col("bs") == "B").then(pl.lit("S")).otherwise(pl.lit("B")).alias("side"),
-        "price", "time_ms", "ord",
-        pl.when(pl.col("bs") == "B").then(pl.col("ask_ref")).otherwise(pl.col("bid_ref")).alias("oid"),
-        (-pl.col("vol")).alias("delta"), pl.lit(_TRADE).alias("reason"))
+        "price", "time_ms", "ord", (-pl.col("vol")).alias("delta"), pl.lit(_TRADE).alias("reason"))
 
     sz_raw = t.filter(pl.col("code") == "C")
     sz_cancels, unlinked = _link_sz_cancels(sz_raw, o)
     total_cancels = sh_cancels.height + sz_raw.height
 
-    deltas = pl.concat([adds, sh_cancels, executed, sz_cancels], how="vertical").sort("symbol", "side", "price", "ord")
+    deltas = pl.concat([adds, sh_cancels, executed, sz_cancels], how="vertical").sort(
+        "symbol", "side", "price", "time_ms", "ord")
     return DeltaResult(deltas, unlinked, total_cancels)
 
 
@@ -89,7 +98,7 @@ def _link_sz_cancels(sz_raw: pl.DataFrame, orders: pl.DataFrame) -> tuple[pl.Dat
     linked = joined.filter(pl.col("o_price").is_not_null())
     return (
         linked.select("symbol", pl.col("o_side").alias("side"), pl.col("o_price").alias("price"), "time_ms", "ord",
-                      "oid", (-pl.col("vol")).alias("delta"), pl.lit(_CANCEL).alias("reason")),
+                      (-pl.col("vol")).alias("delta"), pl.lit(_CANCEL).alias("reason")),
         joined.height - linked.height,
     )
 

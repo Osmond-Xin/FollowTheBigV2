@@ -56,7 +56,7 @@ from ftbv2.core.registry import (
     yields_events,
 )
 
-REGISTRY_DIGEST = "c90241efb8c6b433"
+REGISTRY_DIGEST = "ad98033ac712c1f7"
 """金标准摘要（含每个 enum_type 的取值集合）。改任何一条条目都会让它变——
 **改摘要必须同时改 REGISTRY_VERSION**。这条是本文件里最有用的一个测试：
 它不判断对错，只保证没有人能悄悄改掉定义。"""
@@ -356,8 +356,9 @@ def test_版本号已随重写而变() -> None:
     """0.2.0 → 0.3.0：不变量由字符串改为可执行谓词、实测密度移出条目、
     假墙加「峰值时刻十档内可见」、成交量时钟刻度改成交额——都属改切割算法。
     0.3.0 → 0.4.0：密度上界重新推导（原来的 10–30 没有出处），真正的约束改为整张表的合计。
-    0.4.0 → 0.5.0：冰山加「每片超过一手」。"""
-    assert version() == "0.5.0"
+    0.4.0 → 0.5.0：冰山加「每片超过一手」。
+    0.5.0 → 0.6.0：冰山换机制——由「同价同量的委托被吃过」改为「档位深度反复归零」。"""
+    assert version() == "0.6.0"
 
 
 # ------------------------------------------------- 适用时段 · 排序键 · 对照裁决（红队 2026-09-03）
@@ -526,6 +527,23 @@ def test_上界的出处写在条目里而不是凭空一个数() -> None:
     for kind in structural_events():
         target = spec(kind).density_target
         assert target is not None and "预算" in target.basis, kind
+
+
+def test_冰山用档位归零替代账户身份() -> None:
+    """逐笔数据里没有账户身份。上一版拿「同价 + 同量」当身份，于是
+    「张三挂 300 被吃掉、李四十秒后也挂 300」算一轮——两个毫不相干的人。
+    要求档位**归零**，中间就没有别人，补上来的只能是同一个人。"""
+    ice = spec("RefillAfterFill")
+    assert InvariantCode.EVERY_CYCLE_ONE_ORDER_FULLY_EATEN in ice.relation.invariants
+    assert "归零" in ice.relation.doc and "身份" in ice.relation.doc
+
+
+def test_冰山与假墙用同一台机器但互补() -> None:
+    """假墙：堆起来又整个消失、**全程零成交**。冰山：堆起来又整个消失、**全部由成交消失**。
+    两条都读 `level_episodes` 的产物，判据相反。"""
+    wall = spec("LevelBuildThenVanish")
+    assert InvariantCode.NO_TRADES_DURING_LIFE in wall.relation.invariants
+    assert InvariantCode.EVERY_CYCLE_ONE_ORDER_FULLY_EATEN in spec("RefillAfterFill").relation.invariants
 
 
 def test_冰山的每片必须超过一手() -> None:

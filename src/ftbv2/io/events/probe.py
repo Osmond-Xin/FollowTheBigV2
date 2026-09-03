@@ -36,9 +36,8 @@ from ftbv2.core.book import (
     frame_levels,
     frame_transitions,
     level_episodes,
-    order_fills,
     quote_levels,
-    same_size_runs,
+    refill_chains,
 )
 from ftbv2.core.raw import Day, DefectLedger, Gap, ReadRequest, Window, in_windows, plan
 from ftbv2.core.registry import DensityMeasurement, EvidenceRef, holds, spec
@@ -217,26 +216,32 @@ def _hidden(frames: dict[str, pl.DataFrame]) -> Candidates:
 
 
 def _refill(frames: dict[str, pl.DataFrame]) -> Candidates:
-    """冰山：同 (标的, side, price) 上委托量相同的连跑，带第一次「成交 → 补单」的两个时刻。
+    """冰山：同一档位上峰值量相同的相邻生命周期连成的链。
 
-    **关联率按交易所分开进 `extra`**，让「能不能合成一个数」由数据说而不是由印象说。
+    与假墙**共用 `level_episodes`**，只是互补地用——假墙看「全程零成交」，
+    冰山看「全部由成交消失、反复同一个幅度」。所以这里不需要成交与委托的关联。
 
-    顺带接上「开跑时该档位在十档里的第几档」——**这不是本条目的不变量**，
-    只是把假墙那一刀（可见性）拿到这里量一量会砍掉多少，供裁决用。
-    量分布不是改定义：改定义要动注册表并动版本号。
+    顺带接上「开链时该档位在十档里的第几档」——**这不是本条目的不变量**，只是量分布。
     """
     delta = depth_deltas(frames["orders"], frames["trades"])
-    fills, link = order_fills(delta.deltas)
+    episodes = level_episodes(delta.deltas)
     quotes = frames["xinqing"]
-    runs = attach_visibility(
-        attach_touch(same_size_runs(fills),
+    chains = attach_visibility(
+        attach_touch(refill_chains(episodes),
                      quotes.rename({"ask_px_1": "ask1", "bid_px_1": "bid1"}), at="t_start"),
         quote_levels(quotes))
-    extra = {"unlinked_cancels": delta.unlinked_cancels, "total_cancels": delta.total_cancels}
-    for ex, got in sorted(link.by_exchange.items()):
-        extra[f"traded_rows_{ex}"] = got["traded_rows"]
-        extra[f"linked_rows_{ex}"] = got["linked_rows"]
-    return Candidates(frame=runs, extra=extra)
+    return Candidates(
+        frame=chains,
+        extra={"unlinked_cancels": delta.unlinked_cancels, "total_cancels": delta.total_cancels,
+               "n_episodes": episodes.height,
+               "n_eaten_cycles": int(episodes.pipe(_eaten_count))},
+    )
+
+
+def _eaten_count(episodes: pl.DataFrame) -> int:
+    """有多少个档位循环是「一笔委托被整个吃光」。链的分母之下还有一层分母，也要看得见。"""
+    from ftbv2.core.book import eaten_cycles
+    return int(eaten_cycles(episodes)["eaten"].sum())
 
 
 _BUILDERS: dict[str, Callable[[dict[str, pl.DataFrame]], Candidates]] = {
@@ -256,7 +261,27 @@ def _summarise(kind: str, table: pl.DataFrame) -> dict[str, list[dict[str, objec
         return {"by_role": _by_role(table).to_dicts()}
     return {"by_exchange": _by_exchange(table).to_dicts(),
             "by_refills": _by_refills(table).to_dicts(),
-            "by_visible_level": _by_level_refill(table).to_dicts()}
+            "by_visible_level": _by_level_refill(table).to_dicts(),
+            "by_role": _by_role_refill(table).to_dicts()}
+
+
+def _by_role_refill(table: pl.DataFrame) -> pl.DataFrame:
+    """三条不变量逐条加上去，看每一条各自砍掉多少。分母是「同幅度的相邻循环链」。"""
+    clean = pl.col("clean_cycles") == pl.col("n_cycles")
+    after = pl.col("refill_time_ms") > pl.col("fill_time_ms")
+    big = pl.col("slice_vol") > 100
+    steps = [
+        ("全部同幅度链", pl.lit(True)),
+        ("每个循环都是一笔被整个吃光", clean),
+        ("· 且补片在吃光之后（≥2 循环）", clean & after.fill_null(value=False)),
+        ("· 且每片超过一手（= 候选）", pl.col("candidate")),
+    ]
+    return pl.DataFrame([
+        {"口径": name, "链数": int(table.filter(m).height),
+         "slice_vol_中位": table.filter(m)["slice_vol"].median(),
+         "n_cycles_中位": table.filter(m)["n_cycles"].median()}
+        for name, m in steps
+    ])
 
 
 def _by_level_refill(table: pl.DataFrame) -> pl.DataFrame:
@@ -276,9 +301,9 @@ def _by_exchange(table: pl.DataFrame) -> pl.DataFrame:
         table.with_columns(pl.when(pl.col("symbol").str.ends_with(".SH"))
                            .then(pl.lit("SH")).otherwise(pl.lit("SZ")).alias("交易所"))
         .group_by("交易所")
-        .agg(pl.len().alias("同价同量连跑"), pl.col("candidate").sum().alias("候选数"),
+        .agg(pl.len().alias("同幅度链"), pl.col("candidate").sum().alias("候选数"),
              pl.col("slice_vol").median().alias("每片量_中位"),
-             pl.col("n_orders").median().alias("笔数_中位"))
+             pl.col("n_cycles").median().alias("循环数_中位"))
         .sort("交易所")
     )
 

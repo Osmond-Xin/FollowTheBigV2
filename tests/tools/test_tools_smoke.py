@@ -96,7 +96,7 @@ def test_bench_read_tool(tmp_path):
 @pytest.mark.parametrize(("kind", "first_invariant"), [
     ("LevelBuildThenVanish", "returns_to_zero"),
     ("FillExceedsDisplayed", "fill_reaches_displayed"),
-    ("RefillAfterFill", "refill_strictly_after_fill"),
+    ("RefillAfterFill", "every_cycle_one_order_fully_eaten"),
 ])
 def test_probe_density_tool(tmp_path, kind, first_invariant):
     """密度回归：夹具里只有一笔委托、没有撤单、没有成交 ⇒ 两条条目都零个候选。
