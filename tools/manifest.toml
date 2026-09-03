@@ -67,3 +67,9 @@ path = "tools/bench_read.py"
 kind = "adapter"
 purpose = "RawStore 全字段读取耗时基准 → JSON + 收据"
 smoke_test = "tests/tools/test_tools_smoke.py"
+
+[[tool]]
+path = "tools/probe_density.py"
+kind = "adapter"
+purpose = "密度回归：RawStore 读样本日 → ftbv2.io.events.probe（按注册表不变量切候选 + 分布）→ JSON + 收据 + 准入判定"
+smoke_test = "tests/tools/test_tools_smoke.py"

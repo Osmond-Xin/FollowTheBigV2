@@ -29,6 +29,8 @@ def _preserve(tmp_path: Path) -> Path:
     write_preserve(root, "trades", DAY, [trade_row("000001.SZ", "093000000")])
     write_preserve(root, "xinqing", DAY, [{"column_4": "93000000", "_symbol": "000001.SZ"}])
     (root / "manifest").mkdir()
+    (root / "manifest" / f"{DAY:%Y%m%d}.json").write_text(
+        json.dumps({"day": DAY.isoformat(), "quality": "self_consistent"}), encoding="utf-8")
     return root
 
 
@@ -91,6 +93,56 @@ def test_bench_read_tool(tmp_path):
     assert r.returncode == 0 and set(out["seconds_per_day"]) == {"orders", "trades", "xinqing"} and out["receipt_id"]
 
 
-@pytest.mark.parametrize("tool", ["tools/ingest_days.py", "tools/audit_preserve.py", "tools/scan_shapes.py", "tools/bench_read.py"])
+@pytest.mark.parametrize(("kind", "first_invariant"), [
+    ("LevelBuildThenVanish", "returns_to_zero"),
+    ("FillExceedsDisplayed", "fill_reaches_displayed"),
+    ("RefillAfterFill", "every_cycle_one_order_fully_eaten"),
+])
+def test_probe_density_tool(tmp_path, kind, first_invariant):
+    """密度回归：夹具里只有一笔委托、没有撤单、没有成交 ⇒ 两条条目都零个候选。
+
+    候选为零时准入必须**拒绝**，不是「通过」：没有事件的实测不构成「量过了」。"""
+    root = _preserve(tmp_path)
+    r = run("tools/probe_density.py", "--root", str(root), "--kind", kind, "--day", DAY.isoformat(),
+            "--ledger", str(ROOT / "ledger" / "defects.toml"), cwd=tmp_path)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["receipt_id"] and out["n_candidates"] == 0
+    assert out["invariants"][0] == first_invariant
+    assert out["准入"].startswith("拒绝"), out["准入"]
+
+
+def test_probe_density_refuses_a_day_missing_a_stream(tmp_path):
+    """20220627 只摄取了 orders / trades：上一版把 res.gaps 丢掉，于是「看不见」与「没数据」
+    都变成 level = null，那天算出 0 个可见候选——一个看起来像行情、其实是缺文件的数。"""
+    root = _preserve(tmp_path)
+    (root / "xinqing" / f"date={DAY:%Y%m%d}.parquet").unlink()
+    r = run("tools/probe_density.py", "--root", str(root), "--kind", "LevelBuildThenVanish",
+            "--day", DAY.isoformat(), "--ledger", str(ROOT / "ledger" / "defects.toml"), cwd=tmp_path)
+    assert r.returncode != 0
+    assert "拒绝出密度" in r.stderr and "xinqing" in r.stderr
+
+
+def test_probe_density_rejects_an_unregistered_kind(tmp_path):
+    """未登记的条目要当场说「查不到」，不是返回空表当成「量到了零条」。"""
+    root = _preserve(tmp_path)
+    r = run("tools/probe_density.py", "--root", str(root), "--kind", "NotAnEvent",
+            "--day", DAY.isoformat(), "--ledger", str(ROOT / "ledger" / "defects.toml"), cwd=tmp_path)
+    assert r.returncode != 0
+
+
+@pytest.mark.parametrize("tool", ["tools/ingest_days.py", "tools/audit_preserve.py", "tools/scan_shapes.py", "tools/bench_read.py", "tools/probe_density.py"])
 def test_adapters_are_thin(tool):
     assert len((ROOT / tool).read_text(encoding="utf-8").splitlines()) <= 120
+
+
+def test_probe_density_reports_concentration(tmp_path):
+    """密度只回答「多不多」，集中度才回答「是不是庄的行为」：
+    庄做的是某只股票的某个阶段，大部分标的当天应当一条没有。夹具里零候选 ⇒ 零率 1.0。"""
+    root = _preserve(tmp_path)
+    r = run("tools/probe_density.py", "--root", str(root), "--kind", "LevelBuildThenVanish",
+            "--day", DAY.isoformat(), "--ledger", str(ROOT / "ledger" / "defects.toml"), cwd=tmp_path)
+    assert r.returncode == 0, r.stderr
+    con = json.loads(r.stdout)["concentration"]
+    assert con["zero_share"] == 1.0 and con["max_per_symbol"] == 0.0
+
