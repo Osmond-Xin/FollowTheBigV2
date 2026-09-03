@@ -197,7 +197,16 @@
 
     <article class="t"><div class="t-name">污染级别<span class="t-en">Contamination level</span></div><div class="t-body">
       <p>一个假设的来源在多大程度上已经知道 V1 对同一问题的结论。假设的必填声明之一；<strong>记录，不消除</strong>。</p>
-      <p>分级标度见第六节【待定】；标度未定前只允许自由文本声明，<strong>不得用于任何机械判定</strong>。</p>
+      <div class="ok"><span class="h">三档标度（2026-09-03 用户裁定）</span>
+        <p>按<strong>知道多少</strong>分，不按<strong>是否看过</strong>分——看没看过不可核查，知道什么可以自陈。</p>
+        <ul>
+          <li><span class="m">unaware</span> —— 不知道 V1 碰过这个问题。</li>
+          <li><span class="m">knows_prior</span> —— 知道 V1 做过，不知道结论的方向。</li>
+          <li><span class="m">knows_verdict</span> —— 知道 V1 的结论。</li>
+        </ul></div>
+      <div class="warn"><span class="h">这是参考值，不是判据</span>
+        <p>它必填、进证据指纹、可被审计，但<strong>不进入任何机械判定</strong>——不因污染级别高就降级裁决，也不据它加权或过滤。理由与「盲验降级为对照与声明」同源：污染不可能被机械消除，工具能做的只有把它记下来让人看见。</p>
+        <p>第一批事件种子的出处都是 V1 失效模式审计，按此标度全部是 <span class="m">knows_verdict</span>——写下来比假装干净好。</p></div>
     </div></article>
 
     <article class="t"><div class="t-name">对照裁决<span class="t-en">Contrast verdict</span></div><div class="t-body">
@@ -425,11 +434,11 @@
     <div class="pend-i"><span class="d">02</span><p>存储引擎、格式与压缩方案。方向已定：<strong>先改读取代码</strong>（零迁移拿到 row group 裁剪 68.7×；pre_buffer 只在争用时救命，2026-09-02 复测）；重编码若做，必须含 <span class="m">DELTA_BINARY_PACKED</span>——只改 dtype 不加 delta 会让文件<strong>变大 7–25%</strong>。</p></div>
     <div class="pend-i"><span class="d">03</span><p><strong>事件注册表的条目内容——注册表目前是空的。</strong>定义的<strong>形状</strong>已定（事件三型 · 回看范围四档 · 边界由结构触发 · 每类一张表，2026-09-03），<strong>条目</strong>尚未写进注册表。候选种子见数据表第五节。</p></div>
     <div class="pend-i"><span class="d">04</span><p>必须实测的数字：事件流实际体积 / 一次全量提取实际耗时 / 「宽而中性」能宽到什么程度 / <strong>跨日型比段内型贵多少</strong>（决定以后加跨日与周期尺度的量付不付得起）。该次扫描须同时产出日级参考层，否则要补第二趟。</p></div>
-    <div class="pend-i"><span class="d">05</span><p>污染级别的分级标度。</p></div>
   </div>
   <div class="ok" style="margin-top:18px"><span class="h">已定，不再是待定</span>
     <p>三层命名（因子 / 组合 / 策略）· 标的宇宙（沿用主板 <span class="m">000/001/002/003/600/601/603/605</span>）· 数据分层（两类存储）。均于 2026-09-01 确认。</p>
-    <p><strong>事件定义的形状</strong>（2026-09-03 用户裁定）：结构切割而非「反常」· 事件三型（区间 / 组 / 时刻）· 回看范围四档（段内 / 日内 / 跨日 / 周期）· 边界由结构触发不由时间触发 · 每类事件一张表 · 周期型落日级参考层的列。见第三节。</p></div>
+    <p><strong>事件定义的形状</strong>（2026-09-03 用户裁定）：结构切割而非「反常」· 事件三型（区间 / 组 / 时刻）· 回看范围四档（段内 / 日内 / 跨日 / 周期）· 边界由结构触发不由时间触发 · 每类事件一张表 · 周期型落日级参考层的列。见第三节。</p>
+    <p><strong>污染级别的三档标度</strong>（2026-09-03 用户裁定）：<span class="m">unaware</span> / <span class="m">knows_prior</span> / <span class="m">knows_verdict</span>。见第二节。是参考值，不是判据。</p></div>
 </section>
 
 <section id="queue">
