@@ -101,3 +101,14 @@ def test_多条不变量是与不是或() -> None:
     frame = pl.DataFrame({"closed": [True, True, False], "executed_vol": [0, 5, 0]})
     got = frame.select(holds(codes, tuple(frame.columns)).alias("m"))["m"].to_list()
     assert got == [True, False, False]
+
+
+def test_值缺失判否而不是判不出来() -> None:
+    """`null` 的意思是「说不出来」，「说不出来」不是「成立」。
+    下游 `filter` 会当假、`sum()` 会跳过，看起来对——但只要有人写 `~mask` 就悄悄反过来。"""
+    frame = pl.DataFrame({"refill_time_ms": [None, 10], "fill_time_ms": [None, 5]},
+                         schema={"refill_time_ms": pl.Int64, "fill_time_ms": pl.Int64})
+    got = frame.select(
+        holds((InvariantCode.REFILL_STRICTLY_AFTER_FILL,), tuple(frame.columns)).alias("m"))
+    assert got["m"].to_list() == [False, True]
+    assert got["m"].null_count() == 0

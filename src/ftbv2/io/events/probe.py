@@ -36,7 +36,9 @@ from ftbv2.core.book import (
     frame_levels,
     frame_transitions,
     level_episodes,
+    order_fills,
     quote_levels,
+    same_size_runs,
 )
 from ftbv2.core.raw import Day, DefectLedger, Gap, ReadRequest, Window, in_windows, plan
 from ftbv2.core.registry import DensityMeasurement, EvidenceRef, holds, spec
@@ -44,6 +46,7 @@ from ftbv2.io.raw import RawStore
 
 WALLS = "LevelBuildThenVanish"
 HIDDEN = "FillExceedsDisplayed"
+REFILL = "RefillAfterFill"
 
 _NEEDED = {
     "orders": ("time_ms", "oid", "type", "side", "price", "vol"),
@@ -213,9 +216,25 @@ def _hidden(frames: dict[str, pl.DataFrame]) -> Candidates:
     )
 
 
+def _refill(frames: dict[str, pl.DataFrame]) -> Candidates:
+    """冰山：同 (标的, side, price) 上委托量相同的连跑，带第一次「成交 → 补单」的两个时刻。
+
+    **关联率按交易所分开进 `extra`**：上交所与深交所差得很远，
+    「某一笔本方委托被成交耗尽」在两边的可信度不同，合成一个数会把上交所的不可靠藏起来。
+    """
+    delta = depth_deltas(frames["orders"], frames["trades"])
+    fills, link = order_fills(delta.deltas)
+    extra = {"unlinked_cancels": delta.unlinked_cancels, "total_cancels": delta.total_cancels}
+    for ex, got in sorted(link.by_exchange.items()):
+        extra[f"traded_rows_{ex}"] = got["traded_rows"]
+        extra[f"linked_rows_{ex}"] = got["linked_rows"]
+    return Candidates(frame=same_size_runs(fills), extra=extra)
+
+
 _BUILDERS: dict[str, Callable[[dict[str, pl.DataFrame]], Candidates]] = {
     WALLS: _walls,
     HIDDEN: _hidden,
+    REFILL: _refill,
 }
 
 
@@ -225,7 +244,40 @@ def _summarise(kind: str, table: pl.DataFrame) -> dict[str, list[dict[str, objec
     if kind == WALLS:
         return {"by_visible_level": _by_level(table).to_dicts(),
                 "by_ticks": _by_ticks(table).to_dicts()}
-    return {"by_role": _by_role(table).to_dicts()}
+    if kind == HIDDEN:
+        return {"by_role": _by_role(table).to_dicts()}
+    return {"by_exchange": _by_exchange(table).to_dicts(),
+            "by_refills": _by_refills(table).to_dicts()}
+
+
+def _by_exchange(table: pl.DataFrame) -> pl.DataFrame:
+    """冰山按交易所分开看。**这条条目的可信度本来就分市场**，合起来看等于没看。"""
+    return (
+        table.with_columns(pl.when(pl.col("symbol").str.ends_with(".SH"))
+                           .then(pl.lit("SH")).otherwise(pl.lit("SZ")).alias("交易所"))
+        .group_by("交易所")
+        .agg(pl.len().alias("同价同量连跑"), pl.col("candidate").sum().alias("候选数"),
+             pl.col("slice_vol").median().alias("每片量_中位"),
+             pl.col("n_orders").median().alias("笔数_中位"))
+        .sort("交易所")
+    )
+
+
+def _by_refills(table: pl.DataFrame) -> pl.DataFrame:
+    """候选按完成了几轮「成交 → 补单」分组。几轮算多是判断，这里只数几轮。"""
+    hit = table.filter(pl.col("candidate"))
+    if hit.height == 0:
+        return pl.DataFrame({"轮数": [], "组数": [], "每片量_中位": [], "span_ms_中位": []})
+    bucket = (pl.when(pl.col("n_refills") == 1).then(pl.lit("1"))
+              .when(pl.col("n_refills") < 5).then(pl.lit("2-4"))
+              .when(pl.col("n_refills") < 10).then(pl.lit("5-9"))
+              .otherwise(pl.lit("10+")))
+    return (
+        hit.with_columns(bucket.alias("轮数")).group_by("轮数")
+        .agg(pl.len().alias("组数"), pl.col("slice_vol").median().alias("每片量_中位"),
+             pl.col("span_ms").median().alias("span_ms_中位"))
+        .sort("组数", descending=True)
+    )
 
 
 def _by_ticks(table: pl.DataFrame) -> pl.DataFrame:

@@ -42,26 +42,35 @@ class DeltaResult:
 
 
 def depth_deltas(orders: pl.DataFrame, trades: pl.DataFrame) -> DeltaResult:
-    """把 orders 与 trades 归一成一条深度增量流：(symbol, side, price, time_ms, ord, delta, reason)。
+    """把 orders 与 trades 归一成一条深度增量流：(symbol, side, price, time_ms, ord, oid, delta, reason)。
 
     `ord` 是源行序，作为同毫秒的稳定次序——没有它，同一毫秒的多笔在不同切分下会改变
     「谁先把档位堆到零」，结果不可复现。
     `side` 统一为委托所在的方向（成交行已折算成被动方）。
+
+    **`oid` 是这一行说的是哪一笔委托**：新增与上交所撤单是它自己的委托号；深交所撤单是
+    被撤的那一笔（由 `_link_sz_cancels` 关联出来）；成交行是**被动方**的委托号
+    （`bs` 是主动方向，所以主买取 `ask_ref`、主卖取 `bid_ref`）。
+    冰山要判「某一笔本方委托被成交耗尽」，靠的就是这一列——**它在这里算一次，
+    不在下游各算一遍**：哪一行属于哪一笔委托，是两个交易所口径差异的一部分，
+    与 side / price 的归一同源。
     """
     o = orders.with_row_index("ord")
     t = trades.with_row_index("ord", offset=o.height)
     sh = pl.col("symbol").str.ends_with(_SH_SUFFIX)
 
     adds = o.filter(~sh | (pl.col("type") == "A")).select(
-        "symbol", "side", "price", "time_ms", "ord",
+        "symbol", "side", "price", "time_ms", "ord", "oid",
         pl.col("vol").alias("delta"), pl.lit(_ADD).alias("reason"))
     sh_cancels = o.filter(sh & (pl.col("type") == "D")).select(
-        "symbol", "side", "price", "time_ms", "ord",
+        "symbol", "side", "price", "time_ms", "ord", "oid",
         (-pl.col("vol")).alias("delta"), pl.lit(_CANCEL).alias("reason"))
 
     executed = t.filter(pl.col("code") != "C").select(
         "symbol", pl.when(pl.col("bs") == "B").then(pl.lit("S")).otherwise(pl.lit("B")).alias("side"),
-        "price", "time_ms", "ord", (-pl.col("vol")).alias("delta"), pl.lit(_TRADE).alias("reason"))
+        "price", "time_ms", "ord",
+        pl.when(pl.col("bs") == "B").then(pl.col("ask_ref")).otherwise(pl.col("bid_ref")).alias("oid"),
+        (-pl.col("vol")).alias("delta"), pl.lit(_TRADE).alias("reason"))
 
     sz_raw = t.filter(pl.col("code") == "C")
     sz_cancels, unlinked = _link_sz_cancels(sz_raw, o)
@@ -80,7 +89,7 @@ def _link_sz_cancels(sz_raw: pl.DataFrame, orders: pl.DataFrame) -> tuple[pl.Dat
     linked = joined.filter(pl.col("o_price").is_not_null())
     return (
         linked.select("symbol", pl.col("o_side").alias("side"), pl.col("o_price").alias("price"), "time_ms", "ord",
-                      (-pl.col("vol")).alias("delta"), pl.lit(_CANCEL).alias("reason")),
+                      "oid", (-pl.col("vol")).alias("delta"), pl.lit(_CANCEL).alias("reason")),
         joined.height - linked.height,
     )
 

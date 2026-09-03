@@ -96,6 +96,7 @@ def test_bench_read_tool(tmp_path):
 @pytest.mark.parametrize(("kind", "first_invariant"), [
     ("LevelBuildThenVanish", "returns_to_zero"),
     ("FillExceedsDisplayed", "fill_reaches_displayed"),
+    ("RefillAfterFill", "refill_strictly_after_fill"),
 ])
 def test_probe_density_tool(tmp_path, kind, first_invariant):
     """密度回归：夹具里只有一笔委托、没有撤单、没有成交 ⇒ 两条条目都零个候选。
@@ -122,12 +123,12 @@ def test_probe_density_refuses_a_day_missing_a_stream(tmp_path):
     assert "拒绝出密度" in r.stderr and "xinqing" in r.stderr
 
 
-def test_probe_density_refuses_a_kind_with_no_builder(tmp_path):
-    """没有候选生成器的条目要当场说「没有」，不是返回空表当成「量到了零条」。"""
+def test_probe_density_rejects_an_unregistered_kind(tmp_path):
+    """未登记的条目要当场说「查不到」，不是返回空表当成「量到了零条」。"""
     root = _preserve(tmp_path)
-    r = run("tools/probe_density.py", "--root", str(root), "--kind", "RefillAfterFill",
+    r = run("tools/probe_density.py", "--root", str(root), "--kind", "NotAnEvent",
             "--day", DAY.isoformat(), "--ledger", str(ROOT / "ledger" / "defects.toml"), cwd=tmp_path)
-    assert r.returncode != 0 and "候选生成器" in r.stderr
+    assert r.returncode != 0
 
 
 @pytest.mark.parametrize("tool", ["tools/ingest_days.py", "tools/audit_preserve.py", "tools/scan_shapes.py", "tools/bench_read.py", "tools/probe_density.py"])

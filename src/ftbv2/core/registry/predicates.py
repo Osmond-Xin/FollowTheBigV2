@@ -87,7 +87,16 @@ def predicate(code: InvariantCode) -> pl.Expr:
 
 
 def holds(codes: tuple[InvariantCode, ...], columns: tuple[str, ...]) -> pl.Expr:
-    """把一组不变量与成一个掩码。**列不齐就抛**：判据读不到它要的列时判出来的真是假的。"""
+    """把一组不变量与成一个掩码。
+
+    **列不齐就抛**：判据读不到它要的列时，判出来的真是假的。
+
+    **值缺失判否**（`fill_null(False)`）。这不是防御性编程，是语义：
+    `refill_time_ms > fill_time_ms` 在「这一组一笔都没吃完」时两边都是 null，
+    polars 给出的是 null 而不是 False——而 null 的意思是「说不出来」，
+    「说不出来」就**不是**「成立」。不填的话下游 `filter` 会当假、`sum()` 会跳过，
+    看起来对，但只要有人写 `~mask` 就悄悄反过来了。
+    """
     missing = sorted({f for c in codes for f in required_fields(c)} - set(columns))
     if missing:
         raise KeyError(f"候选表缺少不变量所需的列：{missing}；已有 {sorted(columns)}")
@@ -96,4 +105,4 @@ def holds(codes: tuple[InvariantCode, ...], columns: tuple[str, ...]) -> pl.Expr
     expr = predicate(codes[0])
     for c in codes[1:]:
         expr = expr & predicate(c)
-    return expr
+    return expr.fill_null(value=False)

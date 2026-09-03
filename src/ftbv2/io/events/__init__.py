@@ -3,6 +3,6 @@
 判据与适用时段从 `core.registry` 取，不在这里重写一份。
 公开接口 = 本文件的 __all__（architecture.toml：io.events）；跨模块只能从这里 import。"""
 
-from ftbv2.io.events.probe import HIDDEN, WALLS, Candidates, DayProbe, Probe, probe
+from ftbv2.io.events.probe import HIDDEN, REFILL, WALLS, Candidates, DayProbe, Probe, probe
 
-__all__ = ["HIDDEN", "WALLS", "Candidates", "DayProbe", "Probe", "probe"]
+__all__ = ["HIDDEN", "REFILL", "WALLS", "Candidates", "DayProbe", "Probe", "probe"]
