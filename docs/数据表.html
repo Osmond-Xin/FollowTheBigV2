@@ -366,7 +366,7 @@
     <thead><tr><th>kind（表名）</th><th>类别 / 型</th><th>回看</th><th>stream</th><th>跨行结构关系（角色 → 不变量码）</th><th>几何度量</th><th>密度</th></tr></thead>
     <tbody>
       <tr><td><span class="m">LevelBuildThenVanish</span><br><span class="note">假墙</span></td><td>结构事件<br>区间</td><td>日内</td><td>orders + trades<br>+ xinqing</td><td>建墙委托 · 拆墙撤单 · 存续期间的成交 · <strong>峰值时刻的十档快照</strong> → <span class="m">returns_to_zero</span> ∧ <span class="m">no_trades_during_life</span> ∧ <span class="m">visible_in_quoted_depth_at_peak</span> ∧ <span class="m">built_by_multiple_orders</span>。深度由 orders / trades 全量重建，<strong>不看十档有没有把它挤出去</strong>——价格移动让挂单跌出十档但它仍在队列里，那不是消失</td><td>side · price · peak_vol · n_orders · n_cancels · build_ms · life_ms · teardown_ms · <strong>level_at_peak</strong> · ticks_from_touch_at_nearest_frame · frame_age_ms</td><td class="num hit"><strong>3.68</strong><br><span class="note">条/(标的·日)<br>坍缩 15,926×<br>21 天 × 200 标的</span></td></tr>
-      <tr><td><span class="m">RefillAfterFill</span><br><span class="note">冰山</span></td><td>结构事件<br>组</td><td>日内</td><td>orders + trades</td><td>被成交耗尽的委托 · 耗尽它的成交 · 同价同量的补单 → <span class="m">refill_strictly_after_fill</span>：三者按时序咬合并至少重复一轮，<strong>补单必须严格发生在成交之后</strong>。结组由交易所状态边界闭合（午休 / 收盘集合竞价 / 停牌 / 当日结束），<strong>不写「隔了 T 久没补就结组」</strong></td><td>side · price · slice_vol · n_refills · total_filled · span_ms · <strong>close_reason</strong></td><td class="num">未实测<br><span class="note">实测须<strong>分交易所报</strong>：trades→orders 关联率 SH 单边 57%，SZ 86%</span></td></tr>
+      <tr><td><span class="m">RefillAfterFill</span><br><span class="note">冰山</span></td><td>结构事件<br>组</td><td>日内</td><td>orders + trades</td><td>被成交耗尽的委托 · 耗尽它的成交 · 同价同量的补单 → <span class="m">refill_strictly_after_fill</span>：三者按时序咬合并至少重复一轮，<strong>补单必须严格发生在成交之后</strong>。结组由交易所状态边界闭合（午休 / 收盘集合竞价 / 停牌 / 当日结束），<strong>不写「隔了 T 久没补就结组」</strong></td><td>side · price · slice_vol · n_refills · total_filled · span_ms · <strong>close_reason</strong></td><td class="num"><strong style="color:var(--hit)">218.92 ✗</strong><br><span class="note">坍缩 268<br><strong>三关全不过</strong><br>一条就超整表预算<br>待裁决</span></td></tr>
       <tr><td><span class="m">FillExceedsDisplayed</span><br><span class="note">隐藏深度</span></td><td>结构事件<br>时刻</td><td>日内</td><td>xinqing + trades<br>+ <strong>orders</strong></td><td>前帧该档展示量 · 两帧之间该档成交 · <strong>两帧之间该档新增的委托</strong> · 后帧该档仍然存在 → <span class="m">fill_reaches_displayed</span> ∧ <span class="m">level_survives_next_frame</span> ∧ <span class="m">no_new_orders_between_frames</span>。第三条是「幸存即隐藏」的必要补丁：3 秒一帧里价格可以穿过该档再被<strong>新挂单</strong>撑住，那时「活着」的是新来的人，不是暗单</td><td>side · price · displayed_vol · executed_vol · surviving_vol · <strong>added_vol</strong> · frame_gap_ms</td><td class="num"><strong>32.68</strong><br><span class="note">坍缩 1,793×<br>21 天 × 200 标的<br>准入通过（上界重定后）</span></td></tr>
       <tr><td><span class="m">VolClockBar</span><br><span class="note">成交量时钟</span></td><td><strong>尺子</strong><br>区间</td><td>跨日<br><span class="m">lookback_days=20</span><br>读 <span class="m">daily_ref.amount</span></td><td>trades</td><td>bar 起点成交 · bar 内全部成交 · 跨过刻度的那一笔 → <span class="m">volume_crosses_tick</span>：累计<strong>成交额</strong>首次跨过 <span class="m">tick_amount</span> 即为终点。<strong>刻度用成交额不用成交量</strong>：高送转当日成交股数在同等资金下天然翻倍，用未复权的成交量做刻度会让当日切出近百根 bar。冷启动不足 20 日<strong>显式记缺口</strong>，不产 bar</td><td>bar_index · amount · volume · vwap · n_trades · <strong>termination</strong><br><span class="note">刻度 = 日均额 ÷ <span class="m">bars_per_day</span>=48</span></td><td class="num">不适用<br><span class="note">尺子的条数由采样分辨率决定，对它谈稀有性没有意义</span></td></tr>
       <tr><td><span class="m">DayBoundary</span><br><span class="note">日界 / 安静日</span></td><td colspan="4"><strong>不是注册表条目</strong>——驱动层从 交易日历 × 标的主表 × 摄取收据的叉积产生。<span class="m">coverage_status</span> 用 <span class="m">CoverageStatus</span> 枚举（covered / partial / absent），<span class="m">gap_codes</span> 复用缺陷账本的 <span class="m">DefectCode</span>（CI 已校验它等于账本 code 集合）</td><td>coverage_status · gap_codes · n_events · quiet_span_ms</td><td class="num">每 (标的,日) 恰好 1 条</td></tr>
@@ -391,6 +391,27 @@
     <p><strong>红队要求补的「两帧之间该档无新增委托」是对的，用处很大</strong>：三个角色逐条加上去——全部帧×档位 3.30 亿 → 成交 ≥ 展示量 430 万 → 且后帧仍在 111.7 万 → <strong>且两帧间无新增委托 13.9 万（砍掉 87.5%）</strong>。不加这一条，八成八的「隐藏深度」其实是三秒里价格穿过该档之后被<strong>新挂单</strong>重新撑住，「活着」的是新来的人。这句话原本只是听着有道理，现在它是一个数。代价是必须加读 orders 流——单靠快照 + 成交物理上判不出来。</p>
     <p><strong>它第一次撞上了准入</strong>：32.68 条/(标的·日) 超过当时的上界 30（逐日 26.1–39.6，不是某天爆量，是整体就在上界附近）。坍缩比 1,793 过关。<strong>候选的展示量中位只有 800 股</strong>，而全部帧×档位是 16,400 股——这批「隐藏深度」绝大多数发生在八手的小档位上：档位越小越容易被一笔单吃穿，「成交 ≥ 展示量」几乎自动成立。结构本身没错，但它<strong>在小档位上退化成了噪声</strong>。</p>
     <p><strong>用户裁定动上界（2026-09-03）</strong>——动的是<strong>上界的出处</strong>，不是把数字调到能过。原来的「10–30」写在一句项目背景里、没有推导过程，红队方法论致命 1 已判为「未经预注册却当机械门禁的验收基线」。新口径从常驻预算推导（见本节开头），并把真正的约束移到<strong>整张表的合计</strong>上。改这两个数会改 <span class="m">digest()</span>，必须同时改 <span class="m">REGISTRY_VERSION</span>（0.3.0 → 0.4.0）。<strong>「小档位上退化成噪声」这件事没有被这次改动解决</strong>，它仍然是一条待处理的结构问题，记在 design-log 里。</p>
+  </div>
+
+  <div class="warn"><span class="h">2026-09-03 实测：冰山切得太宽（三关全不过），且假墙那一刀在这里不管用</span>
+    <p>同一协议（21 天 × 200 标的）。收据 <span class="m">805972c1…0865</span>，详见 <span class="m">design-log/2026-09-03-冰山密度回归.md</span>。前一趟在另一棵源码树上跑出<strong>完全相同</strong>的 218.92 / 919,445 条，是一次免费的可复现性核对。</p>
+    <p><strong>密度 218.92 条/(标的·日)，坍缩 268</strong>：超过单条上界 50，<strong>它一条就超过整张表的预算 100 一倍</strong>，坍缩比也不到下界 1000。逐日 151–287，三关全不过，不是边缘情况。</p>
+    <p><strong>每片量中位 = 100 股 = 一手，而且在每一个可见档位桶、每一个轮数桶里都是 100。</strong>一手的委托被吃掉、又来一笔一手的委托——这在连续竞价里每秒都在发生，它不是「切片下单」，因为<strong>一手是不能再切的</strong>。55% 的候选只完成了一轮，中位跨度 6.9 秒。</p>
+    <p><strong>假墙那一刀（十档内可见）拿到这里不管用——这是个有用的否定结果。</strong>只砍掉 52.5%（218.92 → 104.00，仍超预算），更要命的是<strong>它没有分开两类东西</strong>：十档内与十档外的每片量中位都是 100 股、轮数中位都是 1，而假墙那次两边差 3–10 倍。可见性对假墙有效是因为「看不见的墙吓不到人」——那条结构的意义本身依赖被看见；<strong>冰山不依赖，藏起来才是它的意义</strong>。同一把刀切不同的结构，不该指望一样的效果。</p>
+    <p>按规矩回到设计，不是改上界。四条可能的路都还没实测，见 design-log 第五节。⚠️ <strong>「轮数 ≥ 3」不是路</strong>：条目自己写着「一轮即成立，≥ 3 才是判断，归因子层」，把 k 从 10 改成 3 正是 V1 §C 的错误（<span class="m">REP_MIN=10</span> 是错代理，96% 的触发来自它）。</p>
+  </div>
+
+  <div class="warn"><span class="h">2026-09-03 实测推翻了上一版关于上交所关联率的结论</span>
+    <p>上一版记的是「trades→orders 关联率上交所单边 57% / 双边 14%，深交所 86% / 72% ⇒『某一笔本方委托被成交耗尽』在上交所不可靠」。</p>
+    <div class="scroll"><table>
+      <thead><tr><th>交易所</th><th><span class="m">ask_ref</span></th><th><span class="m">bid_ref</span></th><th>双边都关联上</th><th><strong>被动方那一边</strong></th></tr></thead>
+      <tbody>
+        <tr><td>SH</td><td class="num">60.18%</td><td class="num">51.81%</td><td class="num">11.99%</td><td class="num hit"><strong>99.89%</strong></td></tr>
+        <tr><td>SZ</td><td class="num">100%</td><td class="num">100%</td><td class="num">100%</td><td class="num hit"><strong>99.91%</strong></td></tr>
+      </tbody>
+    </table></div>
+    <p><strong>上交所只有被动方那个号是委托号，主动方那个不是。</strong>上一版量的是「单边 / 双边」——一个<strong>混了主被动的聚合</strong>，所以上交所看起来只有 57%。而冰山要的恰好就是被动方（<strong>「本方委托」就是挂在那里被吃的那一笔</strong>），它在两个市场上都是 99.9%。</p>
+    <p>⇒「冰山在上交所不可靠」这个判断被推翻。该查是对的（红队指对了方向），但查出来的数被用错了口径，于是得出了一个反向的结论。<strong>教训：一个关联率必须说清楚关联的是哪一边</strong>——「57%」本身没错，错在它回答的不是我们要问的问题。</p>
   </div>
 
   <div class="warn"><span class="h">这次回归撞出来的两个缺陷（都是「查不到 = 没有」的变体）</span>
