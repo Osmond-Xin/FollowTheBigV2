@@ -131,8 +131,9 @@ def level_episodes(deltas: pl.DataFrame) -> pl.DataFrame:
     )
 
 
-def attach_touch(episodes: pl.DataFrame, quotes: pl.DataFrame) -> pl.DataFrame:
-    """给每段接上「峰值时刻离本方最优价几个 tick」。
+def attach_touch(episodes: pl.DataFrame, quotes: pl.DataFrame, at: str = "t_peak") -> pl.DataFrame:
+    """给每段接上「参考时刻离本方最优价几个 tick」。`at` 是拿哪个时刻去对齐快照
+    （假墙用峰值时刻 `t_peak`，别的结构用它自己的参考时刻）。
 
     最优价取自**峰值时刻之前最近一帧**十档快照（asof join，backward）——快照 3 秒一帧，
     所以这是一个近似：真实的最优价可能在两帧之间变过。度量名如实反映测量对象
@@ -142,12 +143,12 @@ def attach_touch(episodes: pl.DataFrame, quotes: pl.DataFrame) -> pl.DataFrame:
     quotes 需含：symbol · time_ms · ask1 · bid1（`core.raw.FIELDS["xinqing"]` 的语义名）。
     """
     q = quotes.select("symbol", pl.col("time_ms").alias("q_time"), "ask1", "bid1").sort("q_time")
-    ep = episodes.sort("t_peak")
-    out = ep.join_asof(q, left_on="t_peak", right_on="q_time", by="symbol", strategy="backward")
+    ep = episodes.sort(at)
+    out = ep.join_asof(q, left_on=at, right_on="q_time", by="symbol", strategy="backward")
     touch = pl.when(pl.col("side") == "B").then(pl.col("bid1")).otherwise(pl.col("ask1"))
     return out.with_columns(
         ((pl.col("price") - touch).abs() // TICK).alias("ticks_from_touch_at_nearest_frame"),
-        (pl.col("t_peak") - pl.col("q_time")).alias("frame_age_ms"),
+        (pl.col(at) - pl.col("q_time")).alias("frame_age_ms"),
     ).drop("ask1", "bid1")
 
 

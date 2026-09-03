@@ -219,16 +219,24 @@ def _hidden(frames: dict[str, pl.DataFrame]) -> Candidates:
 def _refill(frames: dict[str, pl.DataFrame]) -> Candidates:
     """冰山：同 (标的, side, price) 上委托量相同的连跑，带第一次「成交 → 补单」的两个时刻。
 
-    **关联率按交易所分开进 `extra`**：上交所与深交所差得很远，
-    「某一笔本方委托被成交耗尽」在两边的可信度不同，合成一个数会把上交所的不可靠藏起来。
+    **关联率按交易所分开进 `extra`**，让「能不能合成一个数」由数据说而不是由印象说。
+
+    顺带接上「开跑时该档位在十档里的第几档」——**这不是本条目的不变量**，
+    只是把假墙那一刀（可见性）拿到这里量一量会砍掉多少，供裁决用。
+    量分布不是改定义：改定义要动注册表并动版本号。
     """
     delta = depth_deltas(frames["orders"], frames["trades"])
     fills, link = order_fills(delta.deltas)
+    quotes = frames["xinqing"]
+    runs = attach_visibility(
+        attach_touch(same_size_runs(fills),
+                     quotes.rename({"ask_px_1": "ask1", "bid_px_1": "bid1"}), at="t_start"),
+        quote_levels(quotes))
     extra = {"unlinked_cancels": delta.unlinked_cancels, "total_cancels": delta.total_cancels}
     for ex, got in sorted(link.by_exchange.items()):
         extra[f"traded_rows_{ex}"] = got["traded_rows"]
         extra[f"linked_rows_{ex}"] = got["linked_rows"]
-    return Candidates(frame=same_size_runs(fills), extra=extra)
+    return Candidates(frame=runs, extra=extra)
 
 
 _BUILDERS: dict[str, Callable[[dict[str, pl.DataFrame]], Candidates]] = {
@@ -247,7 +255,19 @@ def _summarise(kind: str, table: pl.DataFrame) -> dict[str, list[dict[str, objec
     if kind == HIDDEN:
         return {"by_role": _by_role(table).to_dicts()}
     return {"by_exchange": _by_exchange(table).to_dicts(),
-            "by_refills": _by_refills(table).to_dicts()}
+            "by_refills": _by_refills(table).to_dicts(),
+            "by_visible_level": _by_level_refill(table).to_dicts()}
+
+
+def _by_level_refill(table: pl.DataFrame) -> pl.DataFrame:
+    """候选按开跑时的可见档位分组。**假墙那一刀拿到这里会砍掉多少**——只量，不改定义。"""
+    return (
+        table.filter(pl.col("candidate"))
+        .group_by(pl.col("level").fill_null(-1).alias("可见档位"))
+        .agg(pl.len().alias("候选数"), pl.col("slice_vol").median().alias("每片量_中位"),
+             pl.col("n_refills").median().alias("轮数_中位"))
+        .sort("可见档位")
+    )
 
 
 def _by_exchange(table: pl.DataFrame) -> pl.DataFrame:
