@@ -18,14 +18,15 @@ FollowTheBig（V1）的推倒重建。研究目标不变——从 A 股 Level-2 
 ## 现在处于什么阶段
 
 **原始层已合入 main 并经真实数据金标准验证；工程管束前三步已落地（账本 · 入口与工具 · 架构声明），四五步暂缓。**
-**新 session 先读 `design-log/2026-09-03-交接.md`**（状态 · 规矩 · 下一步）。
+**新 session 先读 `design-log/2026-09-03-交接-第二次session.md`**（状态 · 规矩 · 下一步 · 红队未改清单）。
 
 - 仓库：`github.com/Osmond-Xin/FollowTheBigV2`（公开）。main 受 ruleset 保护：只能经 PR 合入，须过 `gate`。
 - 结构硬约束五条（每轮强制，红队重点）：深模块 · 结构化互相调用有约束 · 同一功能只有一个入口 · 单一职责 · 不重复造轮子。红队每 PR 一轮、硬上限五轮。
 - 包：`src/ftbv2/core`（纯逻辑核）/ `src/ftbv2/io`（IO 层）；模块拓扑在 `architecture.toml`，新模块先登记。
 - 门禁：`bash tools/gate.sh`（ruff · 架构 · import-linter · 私有符号 · 账本 · 入口 · 词汇 · pytest），CI 同一入口。词汇门禁需要 `MINIMAX_API_KEY`。
 - 工具只在 `tools/`（登记于 `tools/manifest.toml`）；任何入库数字带收据（`.lineage/receipts/`）。
-- 下一刀：事件注册表 + 事件提取第一片（见交接文档第三节）。
+- 事件注册表（`core.registry` 0.2.0）与盘口重建（`core.book`）已实现；`io.events` 目前只有假墙密度回归。
+- 下一刀：按协议补跑密度（≥5 天）→ 把可见性裁决写进 `LevelBuildThenVanish` → 清红队未改清单（见交接文档第五节）。
 
 ## 硬规则速查
 
