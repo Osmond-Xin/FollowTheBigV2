@@ -7,8 +7,11 @@
 **判据从注册表取，不在这里重写**：候选掩码 = `core.registry.holds(spec.relation.invariants, ...)`。
 上一版把 `closed & executed_vol == 0` 在三个统计函数里各抄了一遍——判据有三份就等于没有单源。
 
-**适用时段也从注册表取**：条目声明 `windows = 连续竞价两段`，读取就按它裁。
-上一版读全天，把开盘集合竞价的挂撤混进了分布里。
+**适用时段约束的是产出，不是读取**：条目声明 `windows = 连续竞价两段`，
+但它是**日内型**——盘口深度必须从开盘逐笔累积，集合竞价里挂下、连续竞价里才撤的委托
+也在队列里。所以三流照读全天，只把**整段生命周期落在窗内**的段算作产出。
+（2026-09-03 实测踩到：把窗下推到读取层，撤单关联不上的比例从 0.04% 跳到 1.31%——
+被过滤掉的正是那些集合竞价里挂下的委托。缺口如实报了出来，才发现窗下错了层。）
 
 逻辑全在 `core.book`（纯核，进 CI）；这里只负责读与编排——读用 `io.raw.RawStore`，
 不自己碰 parquet；价与流的口径取 `core.raw`，不另立一份。
@@ -23,7 +26,7 @@ from dataclasses import dataclass
 import polars as pl
 
 from ftbv2.core.book import attach_touch, attach_visibility, depth_deltas, level_episodes, quote_levels
-from ftbv2.core.raw import Day, DefectLedger, Gap, ReadRequest, plan
+from ftbv2.core.raw import Day, DefectLedger, Gap, ReadRequest, Window, in_windows, plan
 from ftbv2.core.registry import DensityMeasurement, EvidenceRef, holds, spec
 from ftbv2.io.raw import RawStore
 
@@ -131,7 +134,7 @@ def _probe_one_day(store: RawStore, ledger: DefectLedger, day: Day,
     frames, rows, gaps = {}, {}, []
     symbols: frozenset[str] | None = None
     for stream, names in _NEEDED.items():
-        req = ReadRequest(stream, (day,), names, symbols, entry.windows)   # 未登记字段由 plan() 抛 KeyError
+        req = ReadRequest(stream, (day,), names, symbols)      # 未登记字段由 plan() 抛 KeyError；窗不下推，见模块 docstring
         res = store.execute(plan(req, store.catalog(stream, (day,)), ledger))
         frames[stream], rows[stream] = res.frame, res.stats.rows
         gaps.extend(res.gaps)
@@ -147,7 +150,8 @@ def _probe_one_day(store: RawStore, ledger: DefectLedger, day: Day,
                             frames["xinqing"].rename({"ask_px_1": "ask1", "bid_px_1": "bid1"}))
     episodes = attach_visibility(episodes, quote_levels(frames["xinqing"]))
     episodes = episodes.with_columns(
-        holds(entry.relation.invariants, tuple(episodes.columns)).alias("candidate"))
+        (holds(entry.relation.invariants, tuple(episodes.columns))
+         & _within(entry.windows)).alias("candidate"))
     return DayProbe(
         day=day,
         n_symbols=frames["orders"]["symbol"].n_unique(),
@@ -162,6 +166,14 @@ def _probe_one_day(store: RawStore, ledger: DefectLedger, day: Day,
         by_visible_level=_by_level(episodes).to_dicts(),
         quantiles=_quantiles(episodes),
     )
+
+
+def _within(windows: tuple[Window, ...]) -> pl.Expr:
+    """整段生命周期都落在适用时段内。跨过午休或伸进集合竞价的段不算产出。
+
+    用 `core.raw.in_windows`，不另写一份时段判断。
+    """
+    return in_windows("t_start", windows) & in_windows("t_end", windows)
 
 
 def _refuse_gaps(day: Day, gaps: tuple[Gap, ...]) -> None:
