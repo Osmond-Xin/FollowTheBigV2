@@ -23,13 +23,34 @@ from ftbv2.core.registry.types import (
     Param,
 )
 
-REGISTRY_VERSION = "0.3.0"
+REGISTRY_ROW_BUDGET = 100.0
+"""整张注册表合计的条数上界，条/(标的·日)。**这才是真正的约束**，单条的上界只防独吞。
+
+怎么来的（2026-09-03，用户裁定「动上界」之后重新推导，取代原来那个没有出处的 10–30）：
+
+    事件层常驻预算 8 GB ÷ 每行约 25 字节 ≈ 3.44 亿行
+    ÷ (约 3000 主板标的 × 1122 个交易日) ≈ 102 条/(标的·日)
+
+⚠️ **两个输入都是估算，且它们的性质不同**：
+- 8 GB 来自数据表第五节，那里已注明「这个数字是估算，尚未实测」；
+- 每行 25 字节是按九列定点整数 + 枚举、parquet 压缩后的估算，**没有实测过**。
+
+所以 100 这个数**是一个预算分配决定，不是一个测量结果**。它可以被改，
+但改它要改的是预算或者字节数的估算——那时该拿出实测，而不是因为某条条目没过就调它。
+改动会改变 `digest()`，必须同时改 `REGISTRY_VERSION`。
+"""
+
+REGISTRY_VERSION = "0.4.0"
 """注册表版本。
 
 0.2.0：2026-09-03 审计后重写切割规则（假墙与冰山由单行过滤改为跨行结构关系）。
 0.3.0：三方红队处置 + 假墙可见性实测落地——不变量由自由字符串改为可执行谓词码；
 实测密度移出条目（纯核只留目标）；新增 event_class / windows / total_order /
 contrast_verdict_ref；假墙加「峰值时刻十档内可见」；成交量时钟刻度由成交量改成交额。
+0.4.0：密度上界重新推导。原来的「10–30 条/(标的·日)」没有出处，红队方法论致命 1 判为
+「未经预注册却当机械门禁的验收基线」；隐藏深度实测 32.68 撞上它之后，用户裁定动上界。
+新的口径是**整张表的合计**（`REGISTRY_ROW_BUDGET`，由常驻预算 ÷ 每行字节推导），
+单条上界降级为「防独吞」的护栏。
 改切割算法 = major，0.x 阶段用 minor 位表达，第一片全量前不锁 1.0。
 """
 
@@ -109,6 +130,30 @@ def admit_full_extraction(kind: str, measurement: DensityMeasurement | None) -> 
             "降维不足，事件流只是原始层的另一种排列"
         )
     return measurement
+
+
+def admit_registry(measurements: Mapping[str, DensityMeasurement]) -> float:
+    """整张表的合计准入：全部结构事件加起来占不占得下常驻预算。返回合计条数。
+
+    **这才是真正的成本约束。** 单条的上界只防一条吃掉半个预算；
+    一条条目占多少合适，要看别的条目占了多少——预算是共用的。
+
+    未实测的条目让本函数拒绝：**不知道就是不知道**，不许按零计入合计蒙混过关。
+    """
+    missing = unmeasured(measurements)
+    if missing:
+        raise ValueError(
+            f"还有条目没测过密度：{', '.join(missing)}。合计预算算不出来——"
+            "把没测的按零计入，等于假装它们不占地方"
+        )
+    total = sum(measurements[k].rows_per_symbol_day for k in structural_events())
+    if total > REGISTRY_ROW_BUDGET:
+        raise ValueError(
+            f"全部结构事件合计 {total:.2f} 条/(标的·日) 超过预算 {REGISTRY_ROW_BUDGET}："
+            "事件层装不下。要么收窄某条结构，要么拿出实测重新推导预算——"
+            "**不要因为某一条没过就调预算**"
+        )
+    return total
 
 
 def uncontrasted() -> tuple[str, ...]:

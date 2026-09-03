@@ -42,6 +42,7 @@ from ftbv2.core.registry import (
     Shape,
     Side,
     admit_full_extraction,
+    admit_registry,
     candidate_variables,
     day_boundary,
     digest,
@@ -55,7 +56,7 @@ from ftbv2.core.registry import (
     yields_events,
 )
 
-REGISTRY_DIGEST = "c84cfa7b28f99cb7"
+REGISTRY_DIGEST = "f80b014f1fa5a7cf"
 """金标准摘要（含每个 enum_type 的取值集合）。改任何一条条目都会让它变——
 **改摘要必须同时改 REGISTRY_VERSION**。这条是本文件里最有用的一个测试：
 它不判断对错，只保证没有人能悄悄改掉定义。"""
@@ -130,8 +131,9 @@ def test_未实测的条目拒绝进入全量提取() -> None:
 
 
 def test_超过成本上界的实测被拒() -> None:
+    """单条的上界只防「一条吃掉半个预算」——真正的约束是整张表的合计。"""
     with pytest.raises(ValueError, match="超过上界"):
-        admit_full_extraction("LevelBuildThenVanish", _measurement(rows=45.0))
+        admit_full_extraction("LevelBuildThenVanish", _measurement(rows=60.0))
 
 
 def test_降维不足的实测被拒() -> None:
@@ -352,8 +354,9 @@ def test_改切割规则会改摘要(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_版本号已随重写而变() -> None:
     """0.2.0 → 0.3.0：不变量由字符串改为可执行谓词、实测密度移出条目、
-    假墙加「峰值时刻十档内可见」、成交量时钟刻度改成交额——都属改切割算法。"""
-    assert version() == "0.3.0"
+    假墙加「峰值时刻十档内可见」、成交量时钟刻度改成交额——都属改切割算法。
+    0.3.0 → 0.4.0：密度上界重新推导（原来的 10–30 没有出处），真正的约束改为整张表的合计。"""
+    assert version() == "0.4.0"
 
 
 # ------------------------------------------------- 适用时段 · 排序键 · 对照裁决（红队 2026-09-03）
@@ -492,3 +495,33 @@ def test_一条都没切出来不算量过了() -> None:
                                event_rows=0, evidence=_evidence())
     with pytest.raises(ValueError, match="一条都没切出来"):
         admit_full_extraction("LevelBuildThenVanish", empty)
+
+
+# ------------------------------------------------- 整张表的合计才是真正的成本约束
+
+def test_合计预算算的是全部结构事件() -> None:
+    """一条条目占多少合适，要看别的条目占了多少——预算是共用的。
+    2026-09-03 实测：假墙 3.68 + 隐藏深度 32.68，冰山未测。"""
+    measured = {k: _measurement(kind=k, rows=r)
+                for k, r in zip(structural_events(), (3.68, 20.0, 32.68), strict=True)}
+    assert admit_registry(measured) == pytest.approx(56.36)
+
+
+def test_没测过的条目让合计准入拒绝() -> None:
+    """**不知道就是不知道**：把没测的按零计入，等于假装它们不占地方。"""
+    with pytest.raises(ValueError, match="还有条目没测过密度"):
+        admit_registry({"LevelBuildThenVanish": _measurement(rows=3.68)})
+
+
+def test_合计超预算即拒() -> None:
+    measured = {k: _measurement(kind=k, rows=40.0) for k in structural_events()}
+    with pytest.raises(ValueError, match="超过预算"):
+        admit_registry(measured)
+
+
+def test_上界的出处写在条目里而不是凭空一个数() -> None:
+    """红队方法论致命 1：原来的「10–30」写在一句项目背景里，不在任何判据位。
+    现在每条的 basis 必须说得出这个数怎么来的，且它进 digest()——改它必须改版本号。"""
+    for kind in structural_events():
+        target = spec(kind).density_target
+        assert target is not None and "预算" in target.basis, kind

@@ -12,8 +12,10 @@ from ftbv2.core.registry.predicates import (
     required_fields,
 )
 from ftbv2.core.registry.registry import (
+    REGISTRY_ROW_BUDGET,
     REGISTRY_VERSION,
     admit_full_extraction,
+    admit_registry,
     candidate_variables,
     day_boundary,
     digest,
@@ -58,10 +60,10 @@ from ftbv2.core.registry.types import (
 
 __all__ = [
     "DAY_BOUNDARY", "FILL_EXCEEDS_DISPLAYED", "LEVEL_BUILD_THEN_VANISH", "REFILL_AFTER_FILL",
-    "REGISTRY_VERSION", "SEEDS", "TOTAL_ORDER", "VOL_CLOCK_BAR", "BarTermination", "Contamination",
+    "REGISTRY_ROW_BUDGET", "REGISTRY_VERSION", "SEEDS", "TOTAL_ORDER", "VOL_CLOCK_BAR", "BarTermination", "Contamination",
     "CoverageStatus", "DayBoundarySpec", "DensityMeasurement", "DensityTarget", "EventClass", "EventSpec",
     "EvidenceRef", "GroupCloseReason", "InvariantCode", "Lookback", "Measure", "MeasureRole", "Param",
-    "ParamRole", "Relation", "Shape", "Side", "admit_full_extraction", "candidate_variables", "day_boundary",
+    "ParamRole", "Relation", "Shape", "Side", "admit_full_extraction", "admit_registry", "candidate_variables", "day_boundary",
     "digest", "extraction_params", "holds", "kinds", "predicate", "required_fields", "spec",
     "structural_events", "uncontrasted", "unmeasured", "version", "yields_events",
 ]

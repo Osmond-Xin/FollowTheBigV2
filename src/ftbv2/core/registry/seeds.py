@@ -55,9 +55,9 @@ _REDTEAM = "docs/design-log/2026-09-02-红队-新结构-{方法论,架构,工程
 审过这四条，三方均判「需改 / 不得合并」，处置清单见 2026-09-03 交接文档第五节。
 这不是「我们自己复核了一遍」——独立上下文、独立判据、结论与作者相左。
 
-⚠️ **这是较弱的一份对照**：它们的简报内联了 CONTEXT.md（无头模式下不许读文件），
-所以**它们知道项目历史**，不满足词汇表「对照裁决」对假设那一处的盲验要求。
-如实记下，见 CONTEXT.md「对照裁决」条的注。"""
+它们的简报内联了 CONTEXT.md，所以它们知道项目历史——**这对条目这一类对照是允许的**：
+判断一条切割规则是不是过滤、会不会在集合竞价爆量，必须懂业务上下文才审得动。
+要求盲的是对**假设**的对照裁决，那是另一类。见 CONTEXT.md「对照裁决」条。"""
 
 
 LEVEL_BUILD_THEN_VANISH = EventSpec(
@@ -131,11 +131,12 @@ LEVEL_BUILD_THEN_VANISH = EventSpec(
         "本条目的稀有性来自结构本身（建起来又整个消失、全程零成交、峰值时可见），不来自任何闸"
     ),
     density_target=DensityTarget(
-        max_rows_per_symbol_day=30.0,
+        max_rows_per_symbol_day=50.0,
         min_collapse_ratio=1000.0,
         basis=(
-            "上界 30 与坍缩下界 1000 都来自立项时的成本口径「5300 万行/天坍缩成几万条/天」："
-            "几万 ÷ 约 3000 标的 ≈ 10–30 条/(标的·日)，5300 万 ÷ 几万 ≈ 1000 倍。"
+            "上界 50 = REGISTRY_ROW_BUDGET(100) 的一半：单条的上界只防**一条吃掉半个预算**，"
+            "真正的成本约束是整张表的合计，由 admit_registry() 算。"
+            "坍缩下界 1000 来自立项成本口径「5300 万行/天坍缩成几万条/天」≈ 1000 倍。"
             "**只设上界不设下界**：比目标更稀有不是缺陷，是更强的结构；"
             "「够不够做统计」是因子层的功效问题，不在这里判"
         ),
@@ -198,9 +199,9 @@ REFILL_AFTER_FILL = EventSpec(
         "本条目不设 k，改用「成交后才补」这个机制约束把稀有性做进结构里，n_refills 交给因子层裁"
     ),
     density_target=DensityTarget(
-        max_rows_per_symbol_day=30.0,
+        max_rows_per_symbol_day=50.0,
         min_collapse_ratio=1000.0,
-        basis="与假墙同一口径（立项成本口径 5300 万行/天 → 几万条/天）。尚未实测",
+        basis="与假墙同一口径：预算的一半防独吞，合计由 admit_registry() 算。尚未实测",
     ),
     contrast_verdict_ref=_REDTEAM,
 )
@@ -268,9 +269,14 @@ FILL_EXCEEDS_DISPLAYED = EventSpec(
         "本条目只记几个量，方向留给因子层"
     ),
     density_target=DensityTarget(
-        max_rows_per_symbol_day=30.0,
+        max_rows_per_symbol_day=50.0,
         min_collapse_ratio=1000.0,
-        basis="与假墙同一口径（立项成本口径 5300 万行/天 → 几万条/天）。尚未实测",
+        basis=(
+            "与假墙同一口径：预算的一半防独吞，合计由 admit_registry() 算。"
+            "2026-09-03 实测 32.68 条/(标的·日) 撞上了原来那个 30 的上界，"
+            "用户裁定动上界——动的是**上界的出处**：原来的 10–30 没有推导过程"
+            "（红队方法论致命 1），新的口径从常驻预算 ÷ 每行字节推出来，两个输入都标了是估算"
+        ),
     ),
     contrast_verdict_ref=_REDTEAM,
 )
