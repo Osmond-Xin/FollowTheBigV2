@@ -91,7 +91,19 @@ FIELDS: dict[Stream, tuple[Field, ...]] = {
         Field("symbol", SYMBOL_COL, "symbol"),
         Field("time_ms", "column_4", "time"),
         Field("last_price", "column_5", "price"),
+        # 以下九列 2026-09-03 按 V2 摄取 manifest 里的 CSV 表头原文登记（万得行情：成交量,成交额,成交笔数,…,当日累计成交量,当日成交额,最高价,最低价,开盘价,前收盘,…,叫卖总量,叫买总量）
+        Field("tick_vol", "column_6", "int"),        # 本帧成交量（股）
+        Field("tick_amt", "column_7", "int"),        # 本帧成交额（元）
+        Field("n_trades", "column_8", "int"),        # 成交笔数（累计）
+        Field("cum_vol", "column_12", "int"),        # 当日累计成交量（股）
+        Field("cum_amt", "column_13", "int"),        # 当日成交额（元）；超 int32，必须 int64
+        Field("high", "column_14", "price"),
+        Field("low", "column_15", "price"),
+        Field("open", "column_16", "price"),
+        Field("prev_close", "column_17", "price"),
         *_ob("ask_px", 18), *_ob("ask_sz", 28), *_ob("bid_px", 38), *_ob("bid_sz", 48),
+        Field("ask_total", "column_60", "int"),      # 叫卖总量（全簿，不止十档）
+        Field("bid_total", "column_61", "int"),      # 叫买总量
     ),
 }
 
