@@ -23,6 +23,8 @@ from enum import Enum
 
 import polars as pl
 
+from ftbv2.core.raw import LOT_SIZE
+
 
 class InvariantCode(Enum):
     """角色之间必须成立的关系。**一条码 = 一段可跑的表达式**，不是一句话。"""
@@ -42,6 +44,17 @@ class InvariantCode(Enum):
 
     REFILL_STRICTLY_AFTER_FILL = "refill_strictly_after_fill"
     """补单的时刻严格晚于把前一片吃完的那笔成交。这是冰山与「密集报单里同价同量相邻」的分界。"""
+
+    SLICE_EXCEEDS_MIN_LOT = "slice_exceeds_min_lot"
+    """每片的委托量超过一手（`core.raw.LOT_SIZE`）。**一手不能再切，所以一手的重复挂单
+    不是切片的证据**——2026-09-03 实测：不加这一条，冰山 218.92 条/(标的·日)，
+    而每片量中位**在每一个可见档位桶、每一个轮数桶里都是 100 股**。
+
+    ⚠️ **这一条与别的不变量性质不同，如实写在这里**：它是对「切片」这个单位本身的前置条件，
+    是**组的属性**，不是角色之间的关系。降维的担子由 `REFILL_STRICTLY_AFTER_FILL` 挑；
+    它只负责把「再切不下去的东西」排除出「切片」的语义。
+    它之所以不是幅度阈值，是因为一手是**交易所定的最小委托单位**，与十档同类——
+    不是我们从分布里挑出来的一个数。"""
 
     FILL_REACHES_DISPLAYED = "fill_reaches_displayed"
     """两帧之间该档成交量 ≥ 前一帧的展示量。"""
@@ -64,6 +77,8 @@ _TABLE: dict[InvariantCode, tuple[tuple[str, ...], Callable[[], pl.Expr]]] = {
     InvariantCode.BUILT_BY_MULTIPLE_ORDERS: (("n_adds",), lambda: pl.col("n_adds") >= 2),
     InvariantCode.REFILL_STRICTLY_AFTER_FILL: (
         ("refill_time_ms", "fill_time_ms"), lambda: pl.col("refill_time_ms") > pl.col("fill_time_ms")),
+    InvariantCode.SLICE_EXCEEDS_MIN_LOT: (
+        ("slice_vol",), lambda: pl.col("slice_vol") > LOT_SIZE),
     InvariantCode.FILL_REACHES_DISPLAYED: (
         ("executed_vol", "displayed_vol"), lambda: pl.col("executed_vol") >= pl.col("displayed_vol")),
     InvariantCode.LEVEL_SURVIVES_NEXT_FRAME: (("surviving_vol",), lambda: pl.col("surviving_vol") > 0),

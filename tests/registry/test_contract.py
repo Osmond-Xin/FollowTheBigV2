@@ -56,7 +56,7 @@ from ftbv2.core.registry import (
     yields_events,
 )
 
-REGISTRY_DIGEST = "f80b014f1fa5a7cf"
+REGISTRY_DIGEST = "c90241efb8c6b433"
 """金标准摘要（含每个 enum_type 的取值集合）。改任何一条条目都会让它变——
 **改摘要必须同时改 REGISTRY_VERSION**。这条是本文件里最有用的一个测试：
 它不判断对错，只保证没有人能悄悄改掉定义。"""
@@ -355,8 +355,9 @@ def test_改切割规则会改摘要(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_版本号已随重写而变() -> None:
     """0.2.0 → 0.3.0：不变量由字符串改为可执行谓词、实测密度移出条目、
     假墙加「峰值时刻十档内可见」、成交量时钟刻度改成交额——都属改切割算法。
-    0.3.0 → 0.4.0：密度上界重新推导（原来的 10–30 没有出处），真正的约束改为整张表的合计。"""
-    assert version() == "0.4.0"
+    0.3.0 → 0.4.0：密度上界重新推导（原来的 10–30 没有出处），真正的约束改为整张表的合计。
+    0.4.0 → 0.5.0：冰山加「每片超过一手」。"""
+    assert version() == "0.5.0"
 
 
 # ------------------------------------------------- 适用时段 · 排序键 · 对照裁决（红队 2026-09-03）
@@ -525,3 +526,13 @@ def test_上界的出处写在条目里而不是凭空一个数() -> None:
     for kind in structural_events():
         target = spec(kind).density_target
         assert target is not None and "预算" in target.basis, kind
+
+
+def test_冰山的每片必须超过一手() -> None:
+    """2026-09-03 裁定。这一条是**组的属性**不是角色之间的关系，如实记在谓词表的 docstring 里——
+    降维的担子仍由 `refill_strictly_after_fill` 挑。"""
+    from ftbv2.core.raw import LOT_SIZE
+    ice = spec("RefillAfterFill")
+    assert InvariantCode.SLICE_EXCEEDS_MIN_LOT in ice.relation.invariants
+    assert "一手" in ice.open_rule and str(LOT_SIZE) not in ice.open_rule, \
+        "开段规则要指向 core.raw.LOT_SIZE 这个口径，而不是抄一个字面量 100"

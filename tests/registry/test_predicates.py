@@ -112,3 +112,14 @@ def test_值缺失判否而不是判不出来() -> None:
         holds((InvariantCode.REFILL_STRICTLY_AFTER_FILL,), tuple(frame.columns)).alias("m"))
     assert got["m"].to_list() == [False, True]
     assert got["m"].null_count() == 0
+
+
+def test_一手的重复挂单不是切片的证据() -> None:
+    """**一手不能再切。** 2026-09-03 实测：不加这一条，冰山 218.92 条/(标的·日)，
+    而每片量中位在每一个可见档位桶、每一个轮数桶里都是 100 股。
+    它不是幅度阈值——一手是 `core.raw.LOT_SIZE`，交易所定的最小委托单位，与十档同类。"""
+    from ftbv2.core.raw import LOT_SIZE
+    assert _mask(InvariantCode.SLICE_EXCEEDS_MIN_LOT, slice_vol=LOT_SIZE + 100)
+    assert not _mask(InvariantCode.SLICE_EXCEEDS_MIN_LOT, slice_vol=LOT_SIZE)
+    assert not _mask(InvariantCode.SLICE_EXCEEDS_MIN_LOT, slice_vol=LOT_SIZE - 1), \
+        "零股是再切不下去的另一端，同样不是切片"
