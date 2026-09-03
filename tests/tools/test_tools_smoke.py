@@ -91,6 +91,16 @@ def test_bench_read_tool(tmp_path):
     assert r.returncode == 0 and set(out["seconds_per_day"]) == {"orders", "trades", "xinqing"} and out["receipt_id"]
 
 
-@pytest.mark.parametrize("tool", ["tools/ingest_days.py", "tools/audit_preserve.py", "tools/scan_shapes.py", "tools/bench_read.py"])
+def test_probe_walls_tool(tmp_path):
+    """假墙密度回归：夹具里只有一笔委托、没有撤单，档位到收盘还挂着 ⇒ 不是「消失」⇒ 零个假墙候选。"""
+    root = _preserve(tmp_path)
+    r = run("tools/probe_walls.py", "--root", str(root), "--day", DAY.isoformat(),
+            "--ledger", str(ROOT / "ledger" / "defects.toml"), cwd=tmp_path)
+    out = json.loads(r.stdout)
+    assert r.returncode == 0, r.stderr
+    assert out["receipt_id"] and out["n_wall_candidates"] == 0 and out["unlinked_cancels"] == 0
+
+
+@pytest.mark.parametrize("tool", ["tools/ingest_days.py", "tools/audit_preserve.py", "tools/scan_shapes.py", "tools/bench_read.py", "tools/probe_walls.py"])
 def test_adapters_are_thin(tool):
     assert len((ROOT / tool).read_text(encoding="utf-8").splitlines()) <= 120

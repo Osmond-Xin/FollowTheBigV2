@@ -1,0 +1,38 @@
+{
+ "ran_at": "2026-09-03T02:57:49.250547+00:00",
+ "mode": "design",
+ "head": "38d7cd079dae7f8d0d3d61c73bfcf4d4bbe715f8",
+ "object_sha256": "2b7153f6464f018292e831b0f516c4176281c3ea1792abcd454feb8aea04dce3",
+ "context_sha256": "aa4d708f5005e255e5e854bc238e3fc36ae7efc05181ab95da6c7d79dcb2f9de",
+ "lens_sha256": {
+  "工程.md": "5069df87fa270f07994eee71036e53ed3beb7c7a8f9faff05d02119829256200",
+  "方法论.md": "21ce0fa27ca1fb657431f3247c9b1e933555179cf4485ecf1fb74d5f57bbc6b3",
+  "架构.md": "5e12efa556ce78607593104570f0eb00658ca5c77e41fd61835de64321fadef4"
+ },
+ "runners": [
+  {
+   "name": "opencode",
+   "version": "/Users/osmond/.opencode/bin/opencode 1.18.26",
+   "exit": 0,
+   "verdict": "裁决：需改",
+   "output": "/Users/osmond/Documents/project/FollowTheBigV2/docs/design-log/2026-09-02-红队-新结构-方法论.md",
+   "output_sha256": "268ecf63050c3dc080f328dba9abc5db9f5f1a2de8ba9644f11d83bb05b64e62"
+  },
+  {
+   "name": "agy",
+   "version": "/Users/osmond/.local/bin/agy 1.1.25",
+   "exit": 0,
+   "verdict": "裁决：不得合并",
+   "output": "/Users/osmond/Documents/project/FollowTheBigV2/docs/design-log/2026-09-02-红队-新结构-架构.md",
+   "output_sha256": "d16c1cde542c0223e9feb424bfe5fc392d655f2f8322115d4e8e24803aa24340"
+  },
+  {
+   "name": "codex",
+   "version": "/Users/osmond/.local/bin/codex codex-cli 0.146.0",
+   "exit": 0,
+   "verdict": "裁决：不得合并",
+   "output": "/Users/osmond/Documents/project/FollowTheBigV2/docs/design-log/2026-09-02-红队-新结构-工程.md",
+   "output_sha256": "e3c6ca305bc62745b36eaab1517c2699470771a04754e6ae2edbf5879433690e"
+  }
+ ]
+}

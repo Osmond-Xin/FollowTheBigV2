@@ -67,3 +67,9 @@ path = "tools/bench_read.py"
 kind = "adapter"
 purpose = "RawStore 全字段读取耗时基准 → JSON + 收据"
 smoke_test = "tests/tools/test_tools_smoke.py"
+
+[[tool]]
+path = "tools/probe_walls.py"
+kind = "adapter"
+purpose = "假墙密度回归：RawStore 读一天 → ftbv2.io.events.probe_walls（档位生命周期 × 离最优价 tick 数分布）→ JSON + 收据"
+smoke_test = "tests/tools/test_tools_smoke.py"

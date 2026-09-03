@@ -43,15 +43,28 @@ depends_on = ["core.raw"]
 # 条目声明的 streams 取 core.raw.STREAMS，不另立一份流名单（不重复造轮子 · 同一功能一个入口），裁决见第四节
 deps_decision = "docs/design-log/2026-09-03-事件注册表第一片.md"
 
-# ---- 架构图上已定义、尚未实现的模块（package 是预定位置；实现时改 status 并补 __all__）----
+[[module]]
+name = "core.book"
+status = "implemented"
+package = "ftbv2.core.book"
+kind = "pure"
+diagram = "盘口重建（逐笔流 → 档位深度时间线 → 档位生命周期；两交易所的深度口径在此吸收一次）"
+# 价格定点标度与字段口径取 core.raw，不另立一份（不重复造轮子 · 同一功能一个入口），裁决见第四节
+deps_decision = "docs/design-log/2026-09-03-事件注册表第一片.md"
+depends_on = ["core.raw"]
 
 [[module]]
 name = "io.events"
-status = "planned"
+status = "implemented"
 package = "ftbv2.io.events"
 kind = "io"
 diagram = "事件提取 ★（单向流式扫原始层，按结构规则切事件；外层按日期升序、内层按标的并行；同一趟产出日级参考层）"
-depends_on = ["core.raw", "core.registry", "io.raw", "io.derived", "io.receipt"]
+# 当前只实现假墙密度回归：切割规则要由数据回归出来，不由我们指定。io.derived 仍是 planned，暂不依赖。
+# 新增 core.book：档位重建是纯逻辑，进 CI；本模块只读与编排，不重写盘口逻辑。裁决见第四节
+deps_decision = "docs/design-log/2026-09-03-事件注册表第一片.md"
+depends_on = ["core.raw", "core.book", "core.registry", "io.raw", "io.receipt"]
+
+# ---- 架构图上已定义、尚未实现的模块（package 是预定位置；实现时改 status 并补 __all__）----
 
 [[module]]
 name = "io.derived"
