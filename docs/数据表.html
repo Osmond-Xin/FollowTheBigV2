@@ -356,10 +356,24 @@
 
 <section id="events">
   <h2>五 · 事件层</h2>
-  <div class="empty">
-    <div class="big">空</div>
-    <p style="max-width:56ch">目前<strong>没有任何事件被定义</strong>——<strong>事件注册表为空</strong>。定义的<strong>形状</strong>已于 2026-09-03 定死（见下方三块），<strong>条目</strong>还没写。定义落在注册表（纯逻辑核、进 CI），不落在本表的文字里；本表只记录候选种子与不变量。</p>
-    <p class="note" style="max-width:60ch">事件层的作用：把 5,300 万行/天的逐笔数据坍缩成几万条结构记录，让日常研究彻底脱离 4 IOPS 的外置盘。预估 5–8 GB 常驻内置 SSD——<strong>这个数字是估算，尚未实测</strong>。</p>
+  <p class="note" style="max-width:68ch">事件层的作用：把 5,300 万行/天的逐笔数据坍缩成几万条结构记录，让日常研究彻底脱离 4 IOPS 的外置盘。预估 5–8 GB 常驻内置 SSD——<strong>这个数字是估算，尚未实测</strong>。定义落在注册表 <span class="m">ftbv2.core.registry</span>（纯逻辑核、进 CI、版本 0.1.0），<strong>不落在本表的文字里</strong>；本表只记落盘形态与不变量。</p>
+
+  <h3>第一批条目（注册表 0.1.0 · 每类一张表，表名 = <span class="m">kind</span>）</h3>
+  <p class="note" style="max-width:68ch">选择标准不是「便宜」，是<strong>每类提取器至少一条</strong>——只做段内型，第二批一来跨日型就得改接口。四条覆盖：区间/段内/单流 · 组/段内/单流 · 时刻/日内/多流 · 区间/跨日/读日级参考层。<strong>尚未在真实数据上跑过，预算列是拍的不是测的。</strong></p>
+  <div class="scroll"><table>
+    <thead><tr><th>kind（表名）</th><th>型</th><th>回看</th><th>stream</th><th>几何度量</th><th>预算 / 期望（条·标的·日）</th><th>语义别名</th></tr></thead>
+    <tbody>
+      <tr><td><span class="m">QuoteThenWithdraw</span></td><td>区间</td><td>段内</td><td>orders</td><td>side · price · vol · rest_ms · ticks_from_touch_at_cancel</td><td class="num">200,000 / 20,000</td><td>假墙撤单</td></tr>
+      <tr><td><span class="m">Seq_RepeatedSamePxVol</span></td><td>组</td><td>段内</td><td>orders</td><td>side · price · slice_vol · n_slices · span_ms</td><td class="num">50,000 / 2,000</td><td>冰山</td></tr>
+      <tr><td><span class="m">SnapshotRestGeqDisp</span></td><td>时刻</td><td>日内</td><td>xinqing + trades</td><td>side · price · displayed_vol · executed_vol</td><td class="num">100,000 / 5,000</td><td>隐藏深度</td></tr>
+      <tr><td><span class="m">VolClockBar</span></td><td>区间</td><td>跨日（<span class="m">lookback_days=20</span>，读 <span class="m">daily_ref.volume</span>）</td><td>trades</td><td>bar_index · volume · vwap · n_trades</td><td class="num">2,000 / 200</td><td>成交量时钟</td></tr>
+      <tr><td><span class="m">DayBoundary</span></td><td colspan="3"><strong>不是注册表条目</strong>——驱动层从 交易日历 × 标的主表 × 摄取收据的叉积产生</td><td>coverage_status · gap_codes · n_events · quiet_span_ms</td><td class="num">每 (标的,日) 恰好 1 条</td><td>日界 / 安静日</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="warn"><span class="h">已知的体积风险：QuoteThenWithdraw</span>
+    <p>原种子名 <span class="m">QuoteThenWithdrawWithinT</span> 里的 <strong>T 是一个时间上界</strong>，与「边界由结构触发不由时间触发」直接冲突，2026-09-03 去掉。切割规则只留两个结构端点（挂出 / 被整笔撤销），<span class="m">rest_ms</span> 作为几何度量记录、<strong>不设上界</strong>；「几秒内撤才算假墙」搬到因子层。</p>
+    <p>代价是：<strong>每一笔被整笔撤销的委托都是一条事件</strong>。A 股撤单率不低，这条很可能是四条里最大的一张表。预算 20 万是拍的。第一片在 20 天产物上跑完拿真数字，超了就带着实测回来重议——<strong>不靠猜，靠量</strong>。这正是「事件流实际体积」这个必测数字要回答的问题。</p>
   </div>
 
   <div class="warn"><span class="h">定义事件时必须守的一条（2026-09-03 收口）</span>

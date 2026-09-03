@@ -33,6 +33,16 @@ kind = "io"
 diagram = "摄取 · 原始层存储与访问（IO 部分）· 原始层审计"
 depends_on = ["core.raw", "io.receipt"]
 
+[[module]]
+name = "core.registry"
+status = "implemented"
+package = "ftbv2.core.registry"
+kind = "pure"
+diagram = "事件注册表（全部事件定义的唯一来源：事件型 · 回看范围 · stream · 字段 · 切割规则 · 提取参数 · 版本）"
+depends_on = ["core.raw"]
+# 条目声明的 streams 取 core.raw.STREAMS，不另立一份流名单（不重复造轮子 · 同一功能一个入口），裁决见第四节
+deps_decision = "docs/design-log/2026-09-03-事件注册表第一片.md"
+
 # ---- 架构图上已定义、尚未实现的模块（package 是预定位置；实现时改 status 并补 __all__）----
 
 [[module]]
@@ -58,14 +68,6 @@ package = "ftbv2.io.runner"
 kind = "io"
 diagram = "验证执行器（取数 · 注入 · 证据包 · 陈旧检测）"
 depends_on = ["core.raw", "core.registry", "core.factor", "core.portfolio", "core.simulate", "core.adjudicate", "core.stats", "io.derived", "io.receipt"]
-
-[[module]]
-name = "core.registry"
-status = "planned"
-package = "ftbv2.core.registry"
-kind = "pure"
-diagram = "事件注册表（全部事件定义的唯一来源：事件型 · 回看范围 · stream · 字段 · 切割规则 · 提取参数 · 版本）"
-depends_on = []
 
 [[module]]
 name = "core.factor"
