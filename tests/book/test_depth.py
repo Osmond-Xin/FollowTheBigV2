@@ -129,3 +129,24 @@ def test_窗口前就有挂单的档位被排除在候选外但仍看得见() ->
                 ask_ref=[1], bid_ref=[2])
     o = _orders(symbol=[], side=[], price=[], time_ms=[], oid=[], type=[], vol=[])
     assert level_episodes(depth_deltas(o, t).deltas).height == 0
+
+
+def test_盘口重建产出注册表不变量要读的每一列() -> None:
+    """**这条把两个模块的耦合钉住。** 假墙的不变量声明它要读 closed / executed_vol / level / n_adds；
+    那些列由 core.book 产出。core.book 改了列名而注册表没跟着改，判据就会在缺列上硬失败——
+    与其等到跑真数据时才炸，不如在这里红。`core.book` 本身不 import 注册表（架构声明里没有这条边），
+    对齐由本测试负责。"""
+    from ftbv2.core.book import attach_visibility, quote_levels
+    from ftbv2.core.registry import spec
+
+    o = _orders(symbol=["000001.SZ"] * 2, side=["B"] * 2, price=[1000, 1000], time_ms=[1, 2],
+                oid=[1, 2], type=["0", "0"], vol=[300, 200])
+    t = pl.DataFrame({"symbol": ["000001.SZ"], "price": [0], "time_ms": [5], "code": ["C"],
+                      "bs": [" "], "vol": [500], "ask_ref": [0], "bid_ref": [1]}, schema=_T_SCHEMA)
+    quotes = pl.DataFrame({"symbol": ["000001.SZ"], "time_ms": [0], "ask1": [1100], "bid1": [1000],
+                           **{f"{s}_px_{i}": [1000 if (s, i) == ("bid", 1) else 0]
+                              for s in ("ask", "bid") for i in range(1, 11)}})
+    episodes = attach_visibility(attach_touch(level_episodes(depth_deltas(o, t).deltas), quotes),
+                                 quote_levels(quotes))
+    needed = set(spec("LevelBuildThenVanish").relation.required_columns())
+    assert needed <= set(episodes.columns), sorted(needed - set(episodes.columns))

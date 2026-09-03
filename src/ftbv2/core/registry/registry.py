@@ -3,21 +3,35 @@
 版本规则（CONTEXT.md「事件流版本」）：改切割算法或参数 = major（全量重跑，隔离旧流）；
 新增独立事件类型 = minor（增量追加）；纯重构、产物哈希不变 = patch。
 `digest()` 是全部条目的内容摘要——改了任何一条，摘要就变；契约测试用金标准摘要盯住它，
-逼得每一次改动都必须同时动 REGISTRY_VERSION，改不动版本就改不了定义。"""
+逼得每一次改动都必须同时动 REGISTRY_VERSION，改不动版本就改不了定义。
+"""
 
 from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from dataclasses import asdict
 from enum import Enum
 
 from ftbv2.core.registry.seeds import DAY_BOUNDARY, SEEDS
-from ftbv2.core.registry.types import DayBoundarySpec, EventSpec, Param
+from ftbv2.core.registry.types import (
+    DayBoundarySpec,
+    DensityMeasurement,
+    EventClass,
+    EventSpec,
+    Param,
+)
 
-REGISTRY_VERSION = "0.2.0"
-"""注册表版本。0.2.0：2026-09-03 审计后重写切割规则（假墙与冰山由单行过滤改为跨行结构关系），
-按 major/minor/patch 规则，改切割算法 = major——0.x 阶段用 minor 位表达，第一片实测前不锁 1.0。"""
+REGISTRY_VERSION = "0.3.0"
+"""注册表版本。
+
+0.2.0：2026-09-03 审计后重写切割规则（假墙与冰山由单行过滤改为跨行结构关系）。
+0.3.0：三方红队处置 + 假墙可见性实测落地——不变量由自由字符串改为可执行谓词码；
+实测密度移出条目（纯核只留目标）；新增 event_class / windows / total_order /
+contrast_verdict_ref；假墙加「峰值时刻十档内可见」；成交量时钟刻度由成交量改成交额。
+改切割算法 = major，0.x 阶段用 minor 位表达，第一片全量前不锁 1.0。
+"""
 
 _BY_KIND: dict[str, EventSpec] = {s.kind: s for s in SEEDS}
 if len(_BY_KIND) != len(SEEDS):
@@ -42,10 +56,74 @@ def day_boundary() -> DayBoundarySpec:
     return DAY_BOUNDARY
 
 
-def unmeasured() -> tuple[str, ...]:
-    """还没在真实数据上测过密度的条目。全量提取前这个列表必须为空——
-    「预算是拍的」必须在花掉 15 小时之前暴露，而不是之后。"""
-    return tuple(s.kind for s in SEEDS if s.density is None)
+def structural_events() -> tuple[str, ...]:
+    """适用密度目标的条目。尺子（bar）与参考层不在其中——它们的条数是设计出来的。"""
+    return tuple(k for k, s in _BY_KIND.items() if s.event_class is EventClass.STRUCTURAL_EVENT)
+
+
+def unmeasured(measurements: Mapping[str, DensityMeasurement]) -> tuple[str, ...]:
+    """还没在真实数据上测过密度的结构事件。
+
+    **参数不是可选的**：实测住在收据里，不在源码里（红队 2026-09-03 架构严重 5）。
+    上一版这个函数从 `spec.density is None` 读答案，那要求有人把量出来的数字反向写回源码。
+    现在调用方必须先把收据读进来，说得出自己拿的是哪一批实测。
+    """
+    return tuple(k for k in structural_events() if k not in measurements)
+
+
+def admit_full_extraction(kind: str, measurement: DensityMeasurement | None) -> DensityMeasurement:
+    """全量提取前的准入：这条实测够不够格让驱动层花掉 15 小时。
+
+    三关，任一不过即抛：**测过** · **不超成本上界** · **确实降了维**。
+    「预算是拍的」必须在花掉 15 小时之前暴露，而不是之后。
+
+    ⚠️ 实测落在目标之外时，该做的是**回到设计**，不是把目标调成能过——
+    目标写在条目里、进 `digest()`，改它必须同时改 `REGISTRY_VERSION`（红队 2026-09-03 方法论严重 4）。
+    """
+    s = spec(kind)
+    if s.event_class is not EventClass.STRUCTURAL_EVENT:
+        raise ValueError(f"{kind} 是 {s.event_class.value}，不走密度准入：它的条数由采样分辨率决定")
+    target = s.density_target
+    assert target is not None, "结构事件必有密度目标，由 EventSpec 构造时保证"
+    if measurement is None:
+        raise ValueError(
+            f"{kind} 还没在真实数据上测过密度。先在样本日上跑一趟拿到条数与坍缩比、带收据，再进全量提取"
+        )
+    if measurement.kind != kind:
+        raise ValueError(f"实测记的是 {measurement.kind}，要准入的是 {kind}：拿错了收据")
+    if measurement.event_rows == 0:
+        raise ValueError(
+            f"{kind} 在 {measurement.symbol_days} 个标的·日上一条都没切出来。"
+            "**零条不是「密度很低」，是「这一趟什么都没量到」**：要么样本不对，要么这条结构不成立。"
+            "坍缩比在这里是无穷大，放它过去就等于用一个除零的数字批准 15 小时"
+        )
+    if measurement.rows_per_symbol_day > target.max_rows_per_symbol_day:
+        raise ValueError(
+            f"{kind} 实测 {measurement.rows_per_symbol_day:.2f} 条/(标的·日) 超过上界 "
+            f"{target.max_rows_per_symbol_day}：这条要么切得太宽，要么它根本不稀有。"
+            "回到设计，不要改上界"
+        )
+    if measurement.collapse_ratio < target.min_collapse_ratio:
+        raise ValueError(
+            f"{kind} 实测坍缩比 {measurement.collapse_ratio:.0f} 低于下界 {target.min_collapse_ratio}："
+            "降维不足，事件流只是原始层的另一种排列"
+        )
+    return measurement
+
+
+def uncontrasted() -> tuple[str, ...]:
+    """还没安排对照裁决的条目。与密度同级的一道门禁（红队 2026-09-03 方法论致命 3）。"""
+    return tuple(k for k, s in _BY_KIND.items() if not s.contrast_verdict_ref)
+
+
+def candidate_variables() -> dict[str, tuple[str, ...]]:
+    """每条条目留给因子层的备选变量。
+
+    **这些名字的总数就是多重检验作用域的下界**：每一个都可能变成一个因子假设，
+    每一个假设都要消耗 episode 预算。把它数出来，是为了让组合空间在预注册之前就是可见的、
+    可争论的，而不是等到有人一口气提了三十个因子才发现（红队 2026-09-03 方法论严重 5）。
+    """
+    return {k: s.candidate_variables() for k, s in _BY_KIND.items()}
 
 
 def extraction_params() -> dict[str, tuple[Param, ...]]:
