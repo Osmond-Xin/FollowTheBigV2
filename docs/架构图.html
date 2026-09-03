@@ -267,14 +267,14 @@
           <line x1="155" y1="108" x2="155" y2="160" stroke="currentColor" stroke-width="1.6" marker-end="url(#ah2)"/>
 
           <rect x="30" y="164" width="250" height="78" fill="var(--pure-soft)" stroke="var(--pure)" stroke-width="1.4"/>
-          <text x="155" y="188" text-anchor="middle" font-size="13.5" fill="var(--ink)" font-weight="500" font-family="var(--font-body)">事件流 · 反常观测</text>
+          <text x="155" y="188" text-anchor="middle" font-size="13.5" fill="var(--ink)" font-weight="500" font-family="var(--font-body)">事件流 · 结构记录</text>
           <text x="155" y="208" text-anchor="middle" font-size="11" fill="var(--muted)">几万行 / 天 · 5–8 GB（待测）</text>
-          <text x="155" y="226" text-anchor="middle" font-size="11" fill="var(--pure)">每 (标的,日) ≥1 条日界事件 · 有序</text>
+          <text x="155" y="226" text-anchor="middle" font-size="11" fill="var(--pure)">每 (标的,日) ≥1 条日界事件 · 每类一张表</text>
 
           <line x1="155" y1="242" x2="155" y2="294" stroke="currentColor" stroke-width="1.6" marker-end="url(#ah2)"/>
 
           <rect x="30" y="298" width="250" height="70" fill="var(--surface)" stroke="var(--pure)" stroke-width="1.4"/>
-          <text x="155" y="322" text-anchor="middle" font-size="13.5" fill="var(--ink)" font-weight="500" font-family="var(--font-body)">因子值 · (标的, 日)</text>
+          <text x="155" y="322" text-anchor="middle" font-size="13.5" fill="var(--ink)" font-weight="500" font-family="var(--font-body)">因子值 · 按事件产出</text>
           <text x="155" y="342" text-anchor="middle" font-size="11" fill="var(--muted)">喂给组合 / 执行模拟 / 裁决</text>
         </g>
 
@@ -282,8 +282,8 @@
         <g font-family="var(--font-mono)">
           <rect x="340" y="112" width="620" height="72" fill="var(--surface)" stroke="var(--io)" stroke-width="1.6"/>
           <text x="356" y="134" font-size="13.5" fill="var(--io)" font-weight="500" font-family="var(--font-body)">事件提取 · IO 层 · 一次 ~15 小时 · 几个月跑一次</text>
-          <text x="356" y="154" font-size="11" fill="var(--muted)">只抽统计反常：分位数 · 持续时长 · 吃穿档数 · 撤单前离最优价距离 · 同价位重复补单次数</text>
-          <text x="356" y="172" font-size="11" fill="var(--pure)">定义与切割规则只来自事件注册表 · 同一趟扫描顺带产出日级参考层（价格 · 涨跌停 · 停牌 · 成交量 · 宇宙）</text>
+          <text x="356" y="154" font-size="11" fill="var(--muted)">只抽结构几何：方向 · 价 · 量 · 笔数 · 档位距离 · 时延 · 跨度　无分位 · 无阈值 · 不记段外的事</text>
+          <text x="356" y="172" font-size="11" fill="var(--pure)">定义只来自注册表（事件型 · 回看范围）· 外层按日序 内层按标的并行 · 同趟产出日级参考层（含周期尺度的列）</text>
           <text x="944" y="134" text-anchor="end" font-size="11.5" fill="var(--alarm)" font-weight="500">绝不判断「这是不是庄」</text>
           <line x1="290" y1="139" x2="336" y2="139" stroke="var(--io)" stroke-width="1.3"/>
 
@@ -294,15 +294,15 @@
           <rect x="340" y="246" width="620" height="72" fill="var(--surface)" stroke="var(--pure)" stroke-width="1.6"/>
           <text x="356" y="268" font-size="13.5" fill="var(--pure)" font-weight="500" font-family="var(--font-body)">因子 · 纯逻辑核 · 秒级 · 一天跑几十次</text>
           <text x="356" y="288" font-size="11.5" fill="var(--ink)">step(状态, 事件) → (新状态, 值?)　　跨日累积不回看原始数据 · 仍是纯函数 · CI 用 10 KB 合成事件 5 ms 测完 60 天转移</text>
-          <text x="356" y="306" font-size="11" fill="var(--muted)">状态按标的 · 在日界事件上产出该 (标的, 日) 的值 · 安静日（有数据无反常）≠ 缺口（无数据，必带归因码）</text>
+          <text x="356" y="306" font-size="11" fill="var(--muted)">状态按标的 · 粒度由因子自身决定，不绑定交易日 · 安静日（有数据无结构）≠ 缺口（无数据，必带归因码）</text>
           <text x="944" y="268" text-anchor="end" font-size="11.5" fill="var(--pure)" font-weight="500">判断全在这一层，随便改</text>
           <line x1="290" y1="273" x2="336" y2="273" stroke="var(--pure)" stroke-width="1.3"/>
         </g>
 
-        <text x="500" y="386" font-size="11.5" fill="var(--muted)" text-anchor="middle" font-family="var(--font-mono)">第一层回答「发生了什么反常」，第二层回答「这是不是庄」 —— 前者少改、慢慢想清楚；后者秒级重跑</text>
+        <text x="500" y="386" font-size="11.5" fill="var(--muted)" text-anchor="middle" font-family="var(--font-mono)">第一层回答「这里有一个什么结构」，第二层回答「这是不是庄」 —— 前者少改、慢慢想清楚；后者秒级重跑</text>
       </svg>
     </div>
-    <figcaption>这一手同时解掉四个致命问题：容量（8 GB 而非 594 亿行）· 跨日 IO 爆炸（状态自己累积，不回看）· 跨日破坏纯函数（状态机是纯的，留在门禁内）· 日常不再依赖 4 IOPS 的盘。<strong>代价是判断前置</strong>：「记哪些字段」这个决定被锁进一个 15 小时才能重跑的位置——所以事件提取必须宽而中性，只抽统计量，不抽语义。</figcaption>
+    <figcaption>这一手同时解掉四个致命问题：容量（8 GB 而非 594 亿行）· 跨日 IO 爆炸（状态自己累积，不回看）· 跨日破坏纯函数（状态机是纯的，留在门禁内）· 日常不再依赖 4 IOPS 的盘。<strong>代价是判断前置</strong>：「记哪些字段」这个决定被锁进一个 15 小时才能重跑的位置——所以事件提取必须宽而中性，只抽结构几何，不抽语义、不抽分位。</figcaption>
   </figure>
 
   <div class="warn"><strong>三个数字必须先实测，否则事件层是空中楼阁</strong>：事件流实际体积（5–8 GB 是估算）· 一次全量提取实际耗时（15 小时是按 89 MB/s 推的）· 「宽而中性」能宽到什么程度（字段越多越不用重跑，但流越大提取越慢）。取 20 个真实交易日、1 个 stream 跑一遍，三个数字全出来。<strong>该次扫描须同时产出日级参考层</strong>，否则日后要补第二趟。</div>
@@ -317,10 +317,10 @@
     <tbody>
       <tr><td><strong>摄取</strong></td><td><span class="tag t-io">IO</span> <span class="tag t-done">已实现</span></td><td class="num">ingest(day, archive, root) → IngestReceipt</td><td>7zz 一趟解出 · 归档条目路径校验 · GBK 表头原文进 manifest · 主板前缀筛选（「不得删行」规则的<strong>显式例外</strong>，Q15，2026-09-02 裁定；丢弃按前缀计数）· 原子写 · 幂等绑定归档哈希与前缀集。<strong>只能承诺 preserve 层自洽，不得承诺「逐行无损」</strong>——对 77% 的数据无法验证。完成判据是三 stream 齐全，行数独立计数（非空行）并与 parquet 比对，不符即硬失败。标的目录只有行情、无委托无成交 = <strong>停牌心跳</strong>，合法形状，记入收据 <span class="m">quote_only_symbols</span>（2026-09-02 实测裁定）；只缺其一仍硬失败</td></tr>
       <tr><td><strong>原始层存储与访问</strong></td><td><span class="tag t-io">IO</span> <span class="tag t-done">已实现</span></td><td class="num">catalog(stream, days) → Catalog<br><strong>plan(request, catalog, ledger) → ScanPlan</strong>（纯，在 core）<br>execute(plan) → ReadResult<br>days(quality) · quality(day) · inspect_raw(…)</td><td>路径 · <span class="m">pre_buffer</span>（RawStore 内部不变量，不是计划上的旋钮）· 按 <span class="m">_symbol</span> statistics 裁剪 row group；时间窗永不下推，只扫描后过滤 · <span class="m">column_N</span>→语义 · dtype 逐位复刻 <span class="m">_i64</span>，Float64 中转丢精度判 null · 时间按行归一化 · 枚举 dictionary（绝不手写映射）· NUL 哨兵 · 缺陷账本（登记数据，未登记形状硬失败；补丁按文件隔离；账本哈希进计划）。输出带 day / symbol 保留列，行序 = 文件序；缺口只用本 stream 事实与账本归因，不偷读别的 stream；未挂载 fail-loud。<span class="m">inspect_raw</span> 是给人看的旁路，不在读取路径上</td></tr>
-      <tr><td><strong>事件提取 ★</strong></td><td><span class="tag t-io">IO</span></td><td class="num">extract(days, registry_version) → EventStream + DailyRef</td><td>单向流式扫原始层，只抽统计反常。<strong>绝不含语义判断。</strong>事件定义与切割规则<strong>只从事件注册表取</strong>。事件流不变量：按 (标的, 时间) 有序；<strong>每 (标的, 交易日) ≥ 1 条日界事件</strong>。同一趟扫描顺带产出<strong>日级参考层</strong>。按 (日, stream) 粒度 checkpoint 可续跑。外置盘单读者锁（两个并发扫描会把顺序读打成 4 IOPS）</td></tr>
+      <tr><td><strong>事件提取 ★</strong></td><td><span class="tag t-io">IO</span></td><td class="num">extract(days, registry_version) → EventStream + DailyRef</td><td>单向流式扫原始层，<strong>按结构规则切事件</strong>，只记几何度量。<strong>绝不含语义判断，也不含分位与阈值。</strong>事件定义与切割规则<strong>只从事件注册表取</strong>——注册表声明「要什么」（事件型 · 回看范围 · stream），驱动层决定「怎么跑」：<strong>外层按日期升序（存储布局所迫，跨日型的 T−1 因此免费满足）、内层同一天内按标的并行</strong>。事件流不变量：按 (标的, 时间) 有序（<strong>读时归并的视图</strong>，落盘是<strong>每类一张表</strong>）；<strong>每 (标的, 交易日) ≥ 1 条日界事件</strong>。同一趟扫描顺带产出<strong>日级参考层</strong>（含周期尺度的无界累计列）。按 (日, stream) 粒度 checkpoint 可续跑。外置盘单读者锁（两个并发扫描会把顺序读打成 4 IOPS）</td></tr>
       <tr><td><strong>事件与因子存储</strong></td><td><span class="tag t-io">IO</span></td><td class="num">get(ref) · put(recipe_hash, table)<br>lineage(ref) · gaps(range)</td><td>存事件流 / 因子值 / 日级参考层。内容寻址 · 血缘 sidecar · 原子写 · 按天回滚 · 预算分账（持久派生 / scratch / 可重建缓存 / 审计产物）。<span class="m">recipe_hash</span> 含<strong>事件流版本</strong>（注册表版本 + 提取参数集 + 数据清单）。<strong>没有 <span class="m">force</span></strong>。缺口必须带归因码，「查不到 = 没有」被禁止</td></tr>
       <tr><td><strong>验证执行器</strong></td><td><span class="tag t-io">IO</span></td><td class="num">run(hypothesis) → Verdict<br>stale()</td><td>DAG 解析 · 验证前查 episode 预算 · 取数与注入 · 指纹持久化 · 写证据包 · 陈旧检测。<strong>判据哈希必须在取数之前固定。</strong>裁决唯一出口是证据包 <span class="m">receipt.json</span>；同目录的 <span class="m">interpretation.json</span>（解读）与 <span class="m">contrast.json</span>（对照裁决）由异构 agent 另写，<strong>非权威、不进指纹</strong></td></tr>
-      <tr><td><strong>事件注册表</strong></td><td><span class="tag t-pure">纯</span></td><td class="num">spec(kind) · extraction_params()<br>version()</td><td><strong>全部事件定义的唯一来源</strong>：字段 · 统计量定义 · 切割规则 · 提取参数 · 版本号。事件提取与因子都只从它取定义，不得各自持有一份。<strong>提取参数是第三类参数</strong>（不来自预注册、假设不得修改、进证据指纹）。「事件的具体定义」这项待定的落点，目前为空</td></tr>
+      <tr><td><strong>事件注册表</strong></td><td><span class="tag t-pure">纯</span></td><td class="num">spec(kind) · extraction_params()<br>version()</td><td><strong>全部事件定义的唯一来源</strong>：每条必须声明 <strong>事件型</strong>（区间 / 组 / 时刻）· <strong>回看范围</strong>（段内 / 日内 / 跨日 / 周期）· 读哪些 stream · 跨日型的 <span class="m">lookback_days</span> 与所读的日级参考层列 · 字段表 · 切割规则 · 提取参数 · 版本号。事件提取与因子都只从它取定义，不得各自持有一份。<strong>提取参数是第三类参数</strong>（不来自预注册、假设不得修改、进证据指纹），且<strong>只能是拓扑量</strong>——分位、排名一律是判断，归预注册。定义的形状已定（2026-09-03），<strong>条目仍为空</strong></td></tr>
       <tr><td><strong>因子 ★</strong></td><td><span class="tag t-pure">纯</span></td><td class="num">step(state, event) → (state', value?)</td><td>状态机，状态按标的。含判断——「庄」的语义载体。<strong>按事件定义、在事件上产出值，粒度由因子决定，不绑定交易日</strong>（2026-09-03 裁定；日界事件只是跨日时钟）；事件类型从事件注册表取。包内<strong>禁止数值字面量</strong>（白名单 0/1/−1），参数只从预注册取。因子之间互不 import</td></tr>
       <tr><td><strong>组合</strong></td><td><span class="tag t-pure">纯</span></td><td class="num">build(factor_panels, params) → Positions</td><td>权重和 · 单标的上限 · 换手上界。出口断言全部满足，不满足即抛，不裁剪</td></tr>
       <tr><td><strong>执行模拟</strong></td><td><span class="tag t-pure">纯</span></td><td class="num">simulate(positions, daily_ref, spec) → Ledger</td><td><strong>窄执行语义核</strong>：撮合 · 滑点 · 涨跌停 · 停牌 · 成交量约束 · 路径依赖，价格与状态全部来自<strong>日级参考层</strong>。签名里<strong>没有 <span class="m">stop_loss</span></strong>，只有参数集句柄（内容寻址、不可变、自动进入校正族）。现金守恒出口断言。全仓唯一——跨文件 AST 哈希去重</td></tr>

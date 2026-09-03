@@ -247,20 +247,35 @@
   <div class="terms">
 
     <article class="t"><div class="t-name">事件<span class="t-en">Event</span></div><div class="t-body">
-      <p>从原始层抽取的一条<strong>反常观测</strong>记录：假墙撤单、激进扫盘、冰山补单、对倒等。字段描述「发生了什么反常」——分位数、持续时长、吃穿档数、撤单前离最优价的距离等。</p>
+      <p>原始层上被<strong>结构规则</strong>切出的一条记录：一段区间、一组委托、或一个时刻。字段只记该结构自身的<strong>几何度量</strong>——方向、价、量、笔数、档位距离、时延、跨度。</p>
       <div class="ok"><span class="h">事件不含判断</span>
-        <p>事件提取器绝不回答「这是不是庄」，<strong>只回答「这是不是统计上反常」</strong>。</p>
+        <p>提取器只回答「这里有一个这样的结构」，<strong>不回答「这个结构够不够大、算不算反常、是不是庄」</strong>。分位、排名、通过 / 不通过，以及这一段之外发生的事，一概不进事件流。</p>
         <p>理由：事件提取是一次扫过 2.585 TB 的重活（约 15 小时），判断一旦写进去就被锁死在一个极难重跑的位置。<strong>判断要留在因子层，那一层改起来是秒级的。</strong></p></div>
+      <div class="warn"><span class="h">不得用「反常」定义事件（2026-09-03 收口）</span>
+        <p>取代此前「只回答这是不是统计上反常」的写法。「统计上反常」要有一个<strong>分布</strong>做参照，而分布是判断；若参照当日自身分布，09:35 的事件存不存在取决于 14:55——<strong>事件流的存在性本身携带未来信息</strong>，任何置换检验都是伪检验，也永远对不上实盘。</p></div>
+      <div class="ok"><span class="h">事件三型（注册表每条必须声明是哪一型）</span>
+        <p>三型的 <span class="m">end_time</span> 含义各不相同，因子层不得一概当作「事情结束了」。</p>
+        <ul>
+          <li><strong>区间</strong> —— 起止之间那个东西确实存在着。假墙：墙挂上到墙撤掉。</li>
+          <li><strong>组</strong> —— 一批离散记录被圈成一个整体，时间上未必连着（中间夹着别人的委托）；起止只是这一组的头和尾。冰山：同价同量的一串委托。</li>
+          <li><strong>时刻</strong> —— 没有跨度，<span class="m">start_time == end_time</span>。隐藏深度：某个快照时点上发现的事实。</li>
+        </ul></div>
+      <div class="ok"><span class="h">边界由结构触发，不由时间触发（2026-09-03 用户裁定）</span>
+        <p>开一段、结一段只能被<strong>结构事件</strong>触发——出现一笔价或量不同的本方委托、方向反转、该笔委托被撤或成交完；不得写「隔了 T 久没动静就结段」。</p>
+        <p>理由：<strong>庄家不掐表，是子弹打光了或者量到了。</strong>时间阈值既是判断，也不符合被观测对象的行为。</p>
+        <p>由此「最少几笔才算一组」这类问题不存在——开组的规则是「出现同价同量的第 2 笔」，2 是「成组」的<strong>词义下限</strong>，不是阈值；≥ 3 才是判断，归因子层。</p></div>
       <div class="ok"><span class="h">事件流的不变量（属于接口，调用者必须知道）</span>
         <ul>
-          <li>按 (标的, 时间) 有序；</li>
-          <li><strong>每个 (标的, 交易日) 至少一条日界事件</strong>——没有任何反常的安静日也让因子状态机前进一步；</li>
-          <li>「安静」与「缺口」是两种信息：安静 = 有数据、无反常；缺口 = 数据不存在。不得合并。</li>
+          <li>按 (标的, 时间) 有序——这是<strong>读时归并出来的视图</strong>，不是落盘形态；</li>
+          <li><strong>每类事件各自一张表</strong>（2026-09-03 用户裁定）：几何度量逐类不同，合成一张宽表会让「新增一种事件」变成改 schema，与版本规则「新增独立事件类型 = minor，增量追加」冲突，逼出全量重跑；</li>
+          <li><strong>每个 (标的, 交易日) 至少一条日界事件</strong>——没有任何结构的安静日也让因子状态机前进一步；</li>
+          <li>「安静」与「缺口」是两种信息：安静 = 有数据、无结构；缺口 = 数据不存在。不得合并。</li>
         </ul></div>
     </div></article>
 
     <article class="t"><div class="t-name">日界事件<span class="t-en">Day-boundary event</span></div><div class="t-body">
-      <p>事件流中标记某 (标的, 交易日) 结束的记录。不含反常统计。是跨日累积与衰减的<strong>时钟</strong>；因子可以在它上面产出值，但它<strong>不是</strong>因子出值的唯一触发点（2026-09-03 用户裁定：因子按事件定义，不绑定交易日）。</p>
+      <p>事件流中标记某 (标的, 交易日) 结束的记录。不含任何结构的几何度量，也不含判断。由<strong>驱动层</strong>从 交易日历 × 标的主表 × 摄取收据 的叉积产生，不是事件注册表条目的产物；覆盖状态与缺口的归因码编码在它的属性里。</p>
+      <p>是跨日累积与衰减的<strong>时钟</strong>；因子可以在它上面产出值，但它<strong>不是</strong>因子出值的唯一触发点（2026-09-03 用户裁定：因子按事件定义，不绑定交易日）。</p>
     </div></article>
 
     <article class="t"><div class="t-name">缺口<span class="t-en">Gap</span></div><div class="t-body">
@@ -268,13 +283,41 @@
     </div></article>
 
     <article class="t"><div class="t-name">事件注册表<span class="t-en">Event registry</span></div><div class="t-body">
-      <p>全部事件定义的<strong>唯一来源</strong>：每种事件的字段、统计量定义、<strong>切割规则</strong>（把逐笔行坍缩为事件的判据）、版本号。属纯逻辑核，进 CI。事件提取与因子都只从它取定义，不得各自持有一份。</p>
+      <p>全部事件定义的<strong>唯一来源</strong>：每种事件的字段、几何度量定义、<strong>切割规则</strong>（把逐笔行坍缩为事件的判据）、版本号。属纯逻辑核，进 CI。事件提取与因子都只从它取定义，不得各自持有一份。</p>
       <p><strong>「事件的具体定义」这项待定的落点就是这张表</strong>，不是数据表里的文字。</p>
+      <div class="ok"><span class="h">每条条目必须声明（缺一不得进注册表）</span>
+        <p>事件型（区间 / 组 / 时刻）· 回看范围（段内 / 日内 / 跨日 / 周期）· 读哪些 stream · 跨日型的 <span class="m">lookback_days</span> 与所读的日级参考层列 · 字段表 · 切割规则 · 提取参数 · 版本。</p>
+        <p>条目声明的是<strong>要什么</strong>，不是<strong>怎么跑</strong>；怎么跑由驱动层照着声明决定。</p></div>
+    </div></article>
+
+    <article class="t"><div class="t-name">回看范围<span class="t-en">Lookback scope</span></div><div class="t-body">
+      <p>一个事件提取器为了切出一段，最远需要往回看到哪里。事件注册表每条必须声明，四档之一：</p>
+      <ul>
+        <li><strong>段内</strong> —— 只看这段前后有界的几行。假墙。</li>
+        <li><strong>日内</strong> —— 要当天一整天在手。多流对齐属于这一档。</li>
+        <li><strong>跨日</strong> —— 要 T−1 及以前的日级参考层，且<strong>写得出一个具体天数</strong>（<span class="m">lookback_days</span>）。成交量时钟。</li>
+        <li><strong>周期</strong> —— 回看范围<strong>写不出一个数</strong>：由数据本身决定，随行业与轮次变化（粮食、矿业、能源的需求周期，可跨年，同一行业不同轮长短也不同）。起算点是上市以来或语料起点。</li>
+      </ul>
+      <p>分界不在「看得远不远」，在<strong>能不能事先写下一个常数</strong>：一旦写得出 <span class="m">lookback_days</span> 就不是周期型。</p>
+      <div class="ok"><span class="h">重跑代价随档递增——这是这个字段最重要的用途</span>
+        <p>段内型改了只重跑那一天；日内型重跑那一天；跨日型改了重跑那个窗口；<strong>周期型改了必须从语料起点全量重跑</strong>。</p></div>
+      <div class="warn"><span class="h">周期型不产出事件行，产出日级参考层的列（2026-09-03 用户裁定）</span>
+        <p>周期尺度的量没有起止、每天都有值，它回答的是「现在处于什么处境」而不是「发生了什么」——<strong>处境不是事件</strong>。若落成事件行，一个周期就是一条横跨数年的事件，起止要等周期走完才知道，提取器就在等未来，单向流式破掉。</p></div>
+      <div class="warn"><span class="h">周期型不许自己判定周期</span>
+        <p>「周期在这儿转了」「现在是高需求」与 p90、tercile 是同一类判断，只是尺度大了几年，写进提取器就锁进全量重跑。这一档只许记<strong>机械可累计的无界量</strong>（上市以来累计成交、历史极值、当前值在全域中的排位）；周期在哪儿转、处境好不好，归因子层。</p>
+        <p>冷启动缺口在这一档是<strong>「够不够未知」</strong>，不是「前 N 天不足」——一个周期多长事先不知道。归因码须能表达这一态。</p></div>
     </div></article>
 
     <article class="t"><div class="t-name">提取参数<span class="t-en">Extraction parameter</span></div><div class="t-body">
-      <p>事件注册表中切割规则所用的参数（分位点、窗长、最小持续时长等）。<strong>与预注册参数不同的第三类参数</strong>：不来自预注册（事件提取在任何预注册之前运行）；假设不得修改它；每个假设必须声明所依赖的事件流版本；进证据指纹。</p>
+      <p>事件注册表中切割规则所用的参数。<strong>只能是拓扑量</strong>——时间上界、笔数边、价位连续性边、离最优价的离散刻度边。<strong>与预注册参数不同的第三类参数</strong>：不来自预注册（事件提取在任何预注册之前运行）；假设不得修改它；每个假设必须声明所依赖的事件流版本；进证据指纹。</p>
       <p>三类参数，各有唯一住所：提取参数 → 事件注册表 · 判断阈值与因子参数 → 预注册 · 白名单字面量 0 / 1 / −1。</p>
+      <div class="ok"><span class="h">一个参数要同时满足三条才是提取参数，否则它是判断阈值，只能进预注册</span>
+        <ul>
+          <li><strong>维度切分</strong>：只定义切割边界的拓扑量；不接受任何关于「该量在样本中的排名 / 分位 / 偏差」的参数。</li>
+          <li><strong>单调同伦</strong>：参数单调变化只能让段切得更细或更粗，不能把事件换成另一种东西。</li>
+          <li><strong>不可调出空集</strong>：参数在允许范围内怎么取，每个 (标的, 交易日) 都至少有一条日界事件。</li>
+        </ul>
+        <p>⚠️ 此条曾把「分位点」列为提取参数的例子，与第一条直接冲突，2026-09-03 删除。</p></div>
     </div></article>
 
     <article class="t"><div class="t-name">事件流版本<span class="t-en">Event stream version</span></div><div class="t-body">
@@ -337,6 +380,9 @@
     <article class="t"><div class="t-name">日级参考层<span class="t-en">Daily reference layer</span></div><div class="t-body">
       <p>派生层的一个数据产品：每个 (标的, 交易日) 的日级事实——开高低收、涨跌停状态、停牌、成交量与成交额、样本宇宙成员资格（主板前缀、ST、上市天数）等 PIT 事实。</p>
       <p>由事件提取的<strong>同一趟扫描</strong>顺带产出，不另起一趟。可重算、带血缘、常驻内置盘。是执行模拟、经验置换检验（保持真实波动率与流动性约束）、样本宇宙声明的输入。<strong>涨跌停与停牌在此是标记列，不是删行依据。</strong></p>
+      <div class="ok"><span class="h">周期尺度的量也落在这一层（2026-09-03 用户裁定）</span>
+        <p>上市以来累计成交、历史极值、当前值在全域中的排位等<strong>无界累计量</strong>，是列，不是事件行（见第三节「回看范围」）。跨日型提取器与因子层都从这里读。</p>
+        <p><strong>写</strong>这一层不需要读昨天（只是当天数据的汇总），<strong>读</strong> T−1 才制造跨日依赖——两者不可混为一谈。</p></div>
     </div></article>
 
     <article class="t"><div class="t-name">血缘<span class="t-en">Lineage</span></div><div class="t-body">
@@ -377,12 +423,13 @@
   <div class="pend">
     <div class="pend-i"><span class="d">01</span><p>假设作为形式对象的确切结构——验证体系吃什么、吐什么。</p></div>
     <div class="pend-i"><span class="d">02</span><p>存储引擎、格式与压缩方案。方向已定：<strong>先改读取代码</strong>（零迁移拿到 row group 裁剪 68.7×；pre_buffer 只在争用时救命，2026-09-02 复测）；重编码若做，必须含 <span class="m">DELTA_BINARY_PACKED</span>——只改 dtype 不加 delta 会让文件<strong>变大 7–25%</strong>。</p></div>
-    <div class="pend-i"><span class="d">03</span><p><strong>事件的具体定义——事件注册表目前是空的。这是最大的一项待定。</strong>候选种子见数据表第五节。</p></div>
-    <div class="pend-i"><span class="d">04</span><p>三个必须实测的数字：事件流实际体积 / 一次全量提取实际耗时 / 「宽而中性」能宽到什么程度。该次扫描须同时产出日级参考层，否则要补第二趟。</p></div>
+    <div class="pend-i"><span class="d">03</span><p><strong>事件注册表的条目内容——注册表目前是空的。</strong>定义的<strong>形状</strong>已定（事件三型 · 回看范围四档 · 边界由结构触发 · 每类一张表，2026-09-03），<strong>条目</strong>尚未写进注册表。候选种子见数据表第五节。</p></div>
+    <div class="pend-i"><span class="d">04</span><p>必须实测的数字：事件流实际体积 / 一次全量提取实际耗时 / 「宽而中性」能宽到什么程度 / <strong>跨日型比段内型贵多少</strong>（决定以后加跨日与周期尺度的量付不付得起）。该次扫描须同时产出日级参考层，否则要补第二趟。</p></div>
     <div class="pend-i"><span class="d">05</span><p>污染级别的分级标度。</p></div>
   </div>
   <div class="ok" style="margin-top:18px"><span class="h">已定，不再是待定</span>
-    <p>三层命名（因子 / 组合 / 策略）· 标的宇宙（沿用主板 <span class="m">000/001/002/003/600/601/603/605</span>）· 数据分层（两类存储）。均于 2026-09-01 确认。</p></div>
+    <p>三层命名（因子 / 组合 / 策略）· 标的宇宙（沿用主板 <span class="m">000/001/002/003/600/601/603/605</span>）· 数据分层（两类存储）。均于 2026-09-01 确认。</p>
+    <p><strong>事件定义的形状</strong>（2026-09-03 用户裁定）：结构切割而非「反常」· 事件三型（区间 / 组 / 时刻）· 回看范围四档（段内 / 日内 / 跨日 / 周期）· 边界由结构触发不由时间触发 · 每类事件一张表 · 周期型落日级参考层的列。见第三节。</p></div>
 </section>
 
 <section id="queue">

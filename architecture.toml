@@ -40,7 +40,7 @@ name = "io.events"
 status = "planned"
 package = "ftbv2.io.events"
 kind = "io"
-diagram = "事件提取 ★（单向流式扫原始层，只抽统计反常；同一趟产出日级参考层）"
+diagram = "事件提取 ★（单向流式扫原始层，按结构规则切事件；外层按日期升序、内层按标的并行；同一趟产出日级参考层）"
 depends_on = ["core.raw", "core.registry", "io.raw", "io.derived", "io.receipt"]
 
 [[module]]
@@ -48,7 +48,7 @@ name = "io.derived"
 status = "planned"
 package = "ftbv2.io.derived"
 kind = "io"
-diagram = "事件与因子存储（内容寻址 · 血缘 sidecar · 原子写）"
+diagram = "事件与因子存储（每类事件一张表 · 读时归并成有序事件流 · 内容寻址 · 血缘 sidecar · 原子写）"
 depends_on = ["core.registry", "io.receipt"]
 
 [[module]]
@@ -64,7 +64,7 @@ name = "core.registry"
 status = "planned"
 package = "ftbv2.core.registry"
 kind = "pure"
-diagram = "事件注册表（全部事件定义的唯一来源：字段 · 切割规则 · 提取参数 · 版本）"
+diagram = "事件注册表（全部事件定义的唯一来源：事件型 · 回看范围 · stream · 字段 · 切割规则 · 提取参数 · 版本）"
 depends_on = []
 
 [[module]]
