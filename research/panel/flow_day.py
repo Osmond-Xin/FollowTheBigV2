@@ -80,7 +80,7 @@ def features_trades(trades: pl.DataFrame) -> pl.DataFrame:
     first30 = (tm >= AM_START) & (tm < FIRST30_END)
     last30 = (tm >= LAST30_START) & (tm < PM_END)
     open_call = (tm >= OPEN_CALL_START) & (tm < AM_START)
-    close_call = (tm >= PM_END) & (tm < CLOSE_CALL_END)
+    close_call = tm >= PM_END          # 收盘竞价成交盖 15:00:00.xxx 时间戳，不设上界
     t = t.with_columns(
         cont=cont, first30=first30, last30=last30, open_call=open_call, close_call=close_call,
     )
@@ -90,12 +90,13 @@ def features_trades(trades: pl.DataFrame) -> pl.DataFrame:
     pas_oid=pl.min_horizontal("ask_ref", "bid_ref"),
 ).sort("symbol", "time_ms")
 
-    # ---- features 1, 2 ----
-    g = cf.group_by("day", "symbol").agg(
-        t_buy_amt=pl.col("amt").filter(pl.col("bs") == "B").sum(),
-        t_sell_amt=pl.col("amt").filter(pl.col("bs") == "S").sum(),
-        t_n_buy=(pl.col("bs") == "B").sum().cast(pl.Int64),
-        t_n_sell=(pl.col("bs") == "S").sum().cast(pl.Int64),
+    # ---- features 1, 2 ----（af = 连续竞价 + 两次集合竞价的成交；t_* 连续竞价口径，day_amt_c 全天口径）
+    af = t.filter(pl.col("is_fill") & (pl.col("cont") | pl.col("open_call") | pl.col("close_call")))
+    g = af.group_by("day", "symbol").agg(
+        t_buy_amt=pl.col("amt").filter(pl.col("cont") & (pl.col("bs") == "B")).sum(),
+        t_sell_amt=pl.col("amt").filter(pl.col("cont") & (pl.col("bs") == "S")).sum(),
+        t_n_buy=(pl.col("cont") & (pl.col("bs") == "B")).sum().cast(pl.Int64),
+        t_n_sell=(pl.col("cont") & (pl.col("bs") == "S")).sum().cast(pl.Int64),
         day_amt_c=pl.col("amt").sum(),
         amt_first30=pl.col("amt").filter(pl.col("first30")).sum(),
         amt_last30=pl.col("amt").filter(pl.col("last30")).sum(),
@@ -271,9 +272,9 @@ def features_trades(trades: pl.DataFrame) -> pl.DataFrame:
         cf.select("day", "symbol", "time_ms",
                   sign=pl.when(pl.col("bs") == "B").then(1).when(pl.col("bs") == "S").then(-1).otherwise(0))
         .with_columns(
-            prev_sign=pl.col("sign").shift(1).over("day", "symbol"),
-            prod=pl.col("sign") * pl.col("sign").shift(1).over("day", "symbol"),
-            run_id=pl.col("sign").rle_id().over("day", "symbol"),
+            prev_sign=pl.col("sign").shift(1).over("symbol"),
+            prod=pl.col("sign") * pl.col("sign").shift(1).over("symbol"),
+            run_id=pl.col("sign").rle_id().over("symbol"),
         )
     )
     ac = (
@@ -310,7 +311,7 @@ def features_trades(trades: pl.DataFrame) -> pl.DataFrame:
         )
         .sort("day", "symbol", "bin")
         .with_columns(
-            prev_px=pl.col("px").shift(1).over("day", "symbol"),
+            prev_px=pl.col("px").shift(1).over("symbol"),
         )
         .filter(pl.col("prev_px").is_not_null() & (pl.col("prev_px") > 0))
         .with_columns(
@@ -463,8 +464,8 @@ def features_orders(orders: pl.DataFrame, cancels: pl.DataFrame) -> pl.DataFrame
         cx_agg = joined.with_columns(is_big20=pl.col("place_amt") >= 200_000).group_by("day", "symbol").agg(
             cx_n_b=pl.col("side").eq("B").sum().cast(pl.Int64),
             cx_n_s=pl.col("side").eq("S").sum().cast(pl.Int64),
-            cx_amt_b=pl.col("cancel_vol").filter(pl.col("side") == "B").sum(),
-            cx_amt_s=pl.col("cancel_vol").filter(pl.col("side") == "S").sum(),
+            cx_amt_b=(pl.col("cancel_vol") * pl.col("place_amt") / pl.col("place_vol")).filter(pl.col("side") == "B").sum(),
+            cx_amt_s=(pl.col("cancel_vol") * pl.col("place_amt") / pl.col("place_vol")).filter(pl.col("side") == "S").sum(),
             cx_hf_n_b=pl.col("life_ms").filter((pl.col("side") == "B") & (pl.col("life_ms") < 1000)).count().cast(pl.Int64),
             cx_hf_n_s=pl.col("life_ms").filter((pl.col("side") == "S") & (pl.col("life_ms") < 1000)).count().cast(pl.Int64),
             cx_big20_n_b=pl.col("is_big20").filter(pl.col("side") == "B").sum().cast(pl.Int64),
