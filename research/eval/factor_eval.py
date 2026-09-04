@@ -148,7 +148,9 @@ def universe(panel: pl.DataFrame, min_amt: float = 1e7, min_age: int = 60) -> pl
         & (pl.col("frac_no_bid") < 0.5)
         & (pl.col("ret1").abs() < 0.095)
     )
-    exec_ok = open_next.is_not_null() & ((open_next / pl.col("close") - 1).abs() < 0.095)
+    # 红队 S1（2026-09-04）：次日开盘未涨停但盘中封板的票，开盘价买不到；用 t+1 的封板占比剔除
+    lock_next = (pl.col("frac_no_ask").shift(-1).over("symbol") < 0.5) & (pl.col("frac_no_bid").shift(-1).over("symbol") < 0.5)
+    exec_ok = open_next.is_not_null() & ((open_next / pl.col("close") - 1).abs() < 0.095) & lock_next.fill_null(False)
     return panel.with_columns(
         in_univ=base.fill_null(False),
         in_univ_exec=(base & exec_ok).fill_null(False),

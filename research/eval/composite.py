@@ -21,6 +21,10 @@ SPECS: dict[str, tuple[tuple[str, int], ...]] = {
     "lot1_only": (("qf_lot1_b", +1),),
     # 2026-09-04 看过 2024 之后定的精简版：只留 2024 也同号显著的成分；2022–2023 对它仍是干净的确认集
     "core": (("qf_lot1_b", +1), ("t_sign_ac1", +1), ("pre_cx_b", -1), ("rkurt", -1)),
+    # 红队 F3（2026-09-04）：qf_lot1_b 在上交所是撮合后残量、沪深不可比；去掉它，只留成交侧聚合的 f_lot1
+    "algo_footprint_nq": (("f_lot1", +1), ("t_sign_ac1", +1), ("q_life_med_b", -1),
+                          ("r_share_b2", -1), ("t_amt_share_close_call", -1)),
+    "core_nq": (("f_lot1", +1), ("t_sign_ac1", +1), ("pre_cx_b", -1), ("rkurt", -1)),
 }
 
 
