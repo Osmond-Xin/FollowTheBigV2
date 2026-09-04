@@ -115,6 +115,8 @@ def add_returns(panel: pl.DataFrame) -> pl.DataFrame:
     )
     g = g.with_columns(
         log_amt20=pl.when(pl.col("amt20") > 0).then(pl.col("amt20").log()).otherwise(None),
+        log_close=pl.when(pl.col("close") > 0).then(pl.col("close").log()).otherwise(None),   # 股价水平：一手金额随价变，成交/委托规模类因子的首要混杂
+        vol20=pl.col("ret1").rolling_std(window_size=20, min_samples=10).over("symbol"),
         amt_share_last15=pl.when(pl.col("amt") > 0)
         .then((pl.col("amt") - pl.col("amt_at_1445")) / pl.col("amt"))
         .otherwise(None),
@@ -285,7 +287,7 @@ def turnover(panel: pl.DataFrame, factor: str, n: int = 10, top: bool = True) ->
     return {"avg_daily_turnover": float(np.mean(fracs)) if fracs else float("nan"), "n_days": len(syms)}
 
 
-def neutralize(panel: pl.DataFrame, factor: str, controls: tuple[str, ...] = ("log_amt20", "mom20")) -> pl.DataFrame:
+def neutralize(panel: pl.DataFrame, factor: str, controls: tuple[str, ...] = ("log_amt20", "mom20", "ret1", "log_close", "vol20")) -> pl.DataFrame:
     """factor 对 controls 做逐日截面 OLS（用秩，不用原始量纲），返回新列 {factor}_neu = 残差。
 
     只在 in_univ 内做回归（更干净的截面），非 universe 行留 null；调用方按 (day, symbol) 关联回去。
