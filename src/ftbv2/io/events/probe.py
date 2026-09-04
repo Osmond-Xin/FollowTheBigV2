@@ -1,0 +1,446 @@
+"""密度回归：在样本日上按注册表的不变量切出候选，给出分布与实测密度。
+
+**存在的理由**：切割规则不该由我们指定，要用数据回归出来（2026-09-03 用户裁定）。
+「一堵墙必须到过最优价吗」是这套东西回答的第一个问题，答案是**不**——该切的一刀是可见性。
+
+**一个入口，按条目派生候选。** 结构事件共用的部分——读三流 · 抽样 · 拒绝缺口 ·
+用注册表的不变量算候选 · 汇成实测密度——只有一份；不同的只是「候选表怎么生成」，
+由 `_BUILDERS` 按 kind 取。加一条新事件是加一个生成器，不是抄一遍这个文件。
+
+**判据从注册表取，不在这里重写**：候选掩码 = `core.registry.holds(spec.relation.invariants, ...)`。
+上一版把 `closed & executed_vol == 0` 在三个统计函数里各抄了一遍——判据有三份就等于没有单源。
+
+**适用时段约束的是产出，不是读取**：条目声明连续竞价两段，但它们是**日内型**——
+盘口深度必须从开盘逐笔累积，集合竞价里挂下、连续竞价里才撤的委托也在队列里。
+所以三流照读全天，只把落在窗内的候选算作产出。
+（2026-09-03 实测踩到：把窗下推到读取层，撤单关联不上的比例从 0.04% 跳到 1.31%——
+被过滤掉的正是那些集合竞价里挂下的委托。缺口如实报了出来，才发现窗下错了层。）
+
+逻辑全在 `core.book`（纯核，进 CI）；这里只负责读与编排——读用 `io.raw.RawStore`，
+不自己碰 parquet；价与流的口径取 `core.raw`，不另立一份。
+"""
+
+from __future__ import annotations
+
+import random
+import time
+from collections.abc import Callable
+from dataclasses import dataclass
+
+import polars as pl
+
+from ftbv2.core.book import (
+    attach_touch,
+    attach_visibility,
+    depth_deltas,
+    frame_levels,
+    frame_transitions,
+    level_episodes,
+    quote_levels,
+    refill_chains,
+)
+from ftbv2.core.raw import Day, DefectLedger, Gap, ReadRequest, Window, in_windows, plan
+from ftbv2.core.registry import DensityMeasurement, EvidenceRef, holds, spec
+from ftbv2.io.raw import RawStore
+
+WALLS = "LevelBuildThenVanish"
+HIDDEN = "FillExceedsDisplayed"
+REFILL = "RefillAfterFill"
+
+_NEEDED = {
+    "orders": ("time_ms", "oid", "type", "side", "price", "vol"),
+    "trades": ("time_ms", "code", "bs", "price", "vol", "ask_ref", "bid_ref"),
+    "xinqing": ("time_ms", *[f"{s}_{k}_{i}" for s in ("ask", "bid") for k in ("px", "sz")
+                             for i in range(1, 11)]),
+}
+
+
+@dataclass(frozen=True)
+class Candidates:
+    """一天一条条目的候选表 + 该条目自己的分布切片与附带计数。
+
+    `frame` 必须带 `t_start` / `t_end`（适用时段由通用部分裁）与不变量所需的全部列。
+    每条条目特有的看法留给它自己——假墙看可见档位，隐藏深度看三个角色各砍掉多少；
+    通用部分不猜每条条目该怎么看自己。
+    """
+
+    frame: pl.DataFrame
+    extra: dict[str, int]
+
+
+@dataclass(frozen=True)
+class DayProbe:
+    """一天的回归结果。`extra` 里的 `unlinked_cancels` 是缺口，不是零——必须随分布一起看。"""
+
+    day: Day
+    n_symbols: int
+    rows_read: dict[str, int]
+    n_rows: int
+    n_candidates: int
+    seconds: float
+    distributions: dict[str, list[dict[str, object]]]
+    extra: dict[str, int]
+    concentration: dict[str, float]
+
+    @property
+    def input_rows(self) -> int:
+        """坍缩比的分母：该条目声明的 streams 在本日本样本上实际读入的行数之和。"""
+        return sum(self.rows_read.values())
+
+
+@dataclass(frozen=True)
+class Probe:
+    """一批样本日的回归结果。
+
+    **多天是常态，不是可选项**：一天一个样本回答不了「这条结构在不同行情下稳不稳」，
+    而密度是要拿去决定花不花 15 小时的（红队 2026-09-03 方法论严重 4）。
+    """
+
+    kind: str
+    days: tuple[Day, ...]
+    per_day: tuple[DayProbe, ...]
+    symbol_days: int
+    input_rows: int
+    n_rows: int
+    n_candidates: int
+    seconds: float
+    rows_per_symbol_day: float
+    collapse_ratio: float
+    invariants: tuple[str, ...]
+    concentration: dict[str, float]
+
+    def measurement(self, evidence: EvidenceRef) -> DensityMeasurement:
+        """把这批实测封成注册表准入用的实测记录。数字进收据，不进源码。"""
+        return DensityMeasurement(
+            kind=self.kind,
+            rows_per_symbol_day=self.rows_per_symbol_day,
+            collapse_ratio=self.collapse_ratio,
+            symbol_days=self.symbol_days,
+            input_rows=self.input_rows,
+            event_rows=self.n_candidates,
+            evidence=evidence,
+        )
+
+
+def probe(store: RawStore, ledger: DefectLedger, kind: str, days: tuple[Day, ...],
+          sample: int = 0, seed: int = 0) -> Probe:
+    """在给定样本日上按条目的不变量数出候选，并给出分布与实测密度。
+
+    不做任何**判断**（多大算大、多快算快），只做条目已经声明的**结构约束**。
+
+    `sample > 0` 时每天随机抽这么多标的。**标的全集取自当日 orders 实际出现的标的**——
+    不能用 row group 的 symbol_min / symbol_max 当全集，那只是每个 row group 的边界值，
+    抽出来的样本会系统性偏向排序边界（2026-09-03 第一次跑就踩了这个）。
+    """
+    if kind not in _BUILDERS:
+        raise KeyError(f"没有 {kind!r} 的候选生成器；已有：{', '.join(_BUILDERS)}")
+    per_day = tuple(_probe_one_day(store, ledger, kind, d, sample, seed) for d in days)
+    symbol_days = sum(p.n_symbols for p in per_day)
+    input_rows = sum(p.input_rows for p in per_day)
+    candidates = sum(p.n_candidates for p in per_day)
+    return Probe(
+        kind=kind,
+        days=days,
+        per_day=per_day,
+        symbol_days=symbol_days,
+        input_rows=input_rows,
+        n_rows=sum(p.n_rows for p in per_day),
+        n_candidates=candidates,
+        seconds=round(sum(p.seconds for p in per_day), 1),
+        rows_per_symbol_day=candidates / symbol_days,
+        collapse_ratio=input_rows / candidates if candidates else float("inf"),
+        invariants=tuple(c.value for c in spec(kind).relation.invariants),
+        concentration=_pooled_concentration(per_day),
+    )
+
+
+def _pooled_concentration(per_day: tuple[DayProbe, ...]) -> dict[str, float]:
+    """把逐日的集中度汇成一个数（按标的·日加权取平均）。逐日的差异仍留在 per_day 里。"""
+    got = [p.concentration for p in per_day if p.concentration]
+    if not got:
+        return {}
+    keys = ("zero_share", "top_decile_share", "max_per_symbol")
+    return {k: round(sum(c[k] for c in got) / len(got), 4) for k in keys}
+
+
+def _probe_one_day(store: RawStore, ledger: DefectLedger, kind: str, day: Day,
+                   sample: int, seed: int) -> DayProbe:
+    t0 = time.time()
+    entry = spec(kind)
+    frames, rows, gaps = {}, {}, []
+    symbols: frozenset[str] | None = None
+    for stream, names in _NEEDED.items():
+        req = ReadRequest(stream, (day,), names, symbols)   # 窗不下推，见模块 docstring
+        res = store.execute(plan(req, store.catalog(stream, (day,)), ledger))
+        frames[stream], rows[stream] = res.frame, res.stats.rows
+        gaps.extend(res.gaps)
+        if stream == "orders" and sample:
+            universe = sorted(frames["orders"]["symbol"].unique().to_list())
+            symbols = frozenset(random.Random(seed).sample(universe, min(sample, len(universe))))
+            frames["orders"] = frames["orders"].filter(pl.col("symbol").is_in(sorted(symbols)))
+            rows["orders"] = frames["orders"].height
+    _refuse_gaps(day, tuple(gaps))
+
+    built = _BUILDERS[kind](frames)
+    table = built.frame.with_columns(
+        (holds(entry.relation.invariants, tuple(built.frame.columns))
+         & _within(entry.windows)).alias("candidate"))
+    return DayProbe(
+        day=day,
+        n_symbols=frames["orders"]["symbol"].n_unique(),
+        rows_read=rows,
+        n_rows=table.height,
+        n_candidates=int(table["candidate"].sum()),
+        seconds=round(time.time() - t0, 1),
+        distributions=_summarise(kind, table),
+        extra=built.extra,
+        concentration=_concentration(table, frames["orders"]["symbol"].n_unique()),
+    )
+
+
+def _concentration(table: pl.DataFrame, n_symbols: int) -> dict[str, float]:
+    """事件在标的之间是**集中**还是**摊平**。
+
+    **这是「是不是庄的行为」的判据，密度只回答「多不多」。** 庄做的是某只股票的某个阶段，
+    所以它的痕迹应当：大部分标的当天一条没有；有的那些集中在少数标的上。
+    反过来——如果每只股票每天都以稳定频率出现，那它是市场的常态纹理，不是谁的痕迹。
+
+    - `zero_share` —— 当天一条都没有的标的占比。**泊松噪声在 λ=30 时它约等于 0**；
+      一个稀有的痕迹应当很高。
+    - `top_decile_share` —— 事件最多的那 10% 标的贡献了多少比例的事件。
+      完全摊平是 0.1，完全集中是 1.0。
+    - `max_per_symbol` —— 单个标的当天最多几条。
+    """
+    if n_symbols == 0:
+        return {}
+    per = (table.filter(pl.col("candidate")).group_by("symbol").agg(pl.len().alias("n"))
+           .sort("n", descending=True))
+    total = int(per["n"].sum())
+    if total == 0:
+        return {"zero_share": 1.0, "top_decile_share": 0.0, "max_per_symbol": 0.0}
+    top_k = max(1, round(n_symbols * 0.1))
+    return {
+        "zero_share": round((n_symbols - per.height) / n_symbols, 4),
+        "top_decile_share": round(int(per["n"].head(top_k).sum()) / total, 4),
+        "max_per_symbol": float(per["n"].max()),
+    }
+
+
+# ------------------------------------------------------------------ 候选生成器（每条条目一个）
+
+def _walls(frames: dict[str, pl.DataFrame]) -> Candidates:
+    """假墙：档位深度从 0 堆起来到回落至 0 的一段，接上峰值时刻的最优价距离与可见档位。"""
+    delta = depth_deltas(frames["orders"], frames["trades"])
+    quotes = frames["xinqing"]
+    episodes = attach_touch(level_episodes(delta.deltas),
+                            quotes.rename({"ask_px_1": "ask1", "bid_px_1": "bid1"}))
+    episodes = attach_visibility(episodes, quote_levels(quotes))
+    return Candidates(
+        frame=episodes,
+        extra={"unlinked_cancels": delta.unlinked_cancels, "total_cancels": delta.total_cancels,
+               "n_closed": int(episodes.filter(pl.col("closed")).height)},
+    )
+
+
+def _hidden(frames: dict[str, pl.DataFrame]) -> Candidates:
+    """隐藏深度：相邻两帧之间每个档位的 展示量 → 成交 → 新增委托 → 幸存量。
+
+    时刻型没有跨度，`t_start == t_end == 前帧时刻`——适用时段按前帧那一刻裁。
+    """
+    delta = depth_deltas(frames["orders"], frames["trades"])
+    moves = frame_transitions(frame_levels(frames["xinqing"]), delta.deltas)
+    return Candidates(
+        frame=moves.with_columns(pl.col("q_time").alias("t_start"),
+                                 pl.col("q_time").alias("t_end")),
+        extra={"unlinked_cancels": delta.unlinked_cancels, "total_cancels": delta.total_cancels},
+    )
+
+
+def _refill(frames: dict[str, pl.DataFrame]) -> Candidates:
+    """冰山：同一档位上峰值量相同的相邻生命周期连成的链。
+
+    与假墙**共用 `level_episodes`**，只是互补地用——假墙看「全程零成交」，
+    冰山看「全部由成交消失、反复同一个幅度」。所以这里不需要成交与委托的关联。
+
+    顺带接上「开链时该档位在十档里的第几档」——**这不是本条目的不变量**，只是量分布。
+    """
+    delta = depth_deltas(frames["orders"], frames["trades"])
+    episodes = level_episodes(delta.deltas)
+    quotes = frames["xinqing"]
+    chains = attach_visibility(
+        attach_touch(refill_chains(episodes),
+                     quotes.rename({"ask_px_1": "ask1", "bid_px_1": "bid1"}), at="t_start"),
+        quote_levels(quotes))
+    return Candidates(
+        frame=chains,
+        extra={"unlinked_cancels": delta.unlinked_cancels, "total_cancels": delta.total_cancels,
+               "n_episodes": episodes.height,
+               "n_eaten_cycles": int(episodes.pipe(_eaten_count))},
+    )
+
+
+def _eaten_count(episodes: pl.DataFrame) -> int:
+    """有多少个档位循环是「一笔委托被整个吃光」。链的分母之下还有一层分母，也要看得见。"""
+    from ftbv2.core.book import eaten_cycles
+    return int(eaten_cycles(episodes)["eaten"].sum())
+
+
+_BUILDERS: dict[str, Callable[[dict[str, pl.DataFrame]], Candidates]] = {
+    WALLS: _walls,
+    HIDDEN: _hidden,
+    REFILL: _refill,
+}
+
+
+# ------------------------------------------------------------------ 分布（只为看，不是切割规则）
+
+def _summarise(kind: str, table: pl.DataFrame) -> dict[str, list[dict[str, object]]]:
+    if kind == WALLS:
+        return {"by_visible_level": _by_level(table).to_dicts(),
+                "by_ticks": _by_ticks(table).to_dicts()}
+    if kind == HIDDEN:
+        return {"by_role": _by_role(table).to_dicts()}
+    return {"by_exchange": _by_exchange(table).to_dicts(),
+            "by_refills": _by_refills(table).to_dicts(),
+            "by_visible_level": _by_level_refill(table).to_dicts(),
+            "by_role": _by_role_refill(table).to_dicts()}
+
+
+def _by_role_refill(table: pl.DataFrame) -> pl.DataFrame:
+    """三条不变量逐条加上去，看每一条各自砍掉多少。分母是「同幅度的相邻循环链」。"""
+    clean = pl.col("clean_cycles") == pl.col("n_cycles")
+    after = pl.col("refill_time_ms") > pl.col("fill_time_ms")
+    big = pl.col("slice_vol") > 100
+    steps = [
+        ("全部同幅度链", pl.lit(True)),
+        ("每个循环都是一笔被整个吃光", clean),
+        ("· 且补片在吃光之后（≥2 循环）", clean & after.fill_null(value=False)),
+        ("· 且每片超过一手（= 候选）", pl.col("candidate")),
+    ]
+    return pl.DataFrame([
+        {"口径": name, "链数": int(table.filter(m).height),
+         "slice_vol_中位": table.filter(m)["slice_vol"].median(),
+         "n_cycles_中位": table.filter(m)["n_cycles"].median()}
+        for name, m in steps
+    ])
+
+
+def _by_level_refill(table: pl.DataFrame) -> pl.DataFrame:
+    """候选按开跑时的可见档位分组。**假墙那一刀拿到这里会砍掉多少**——只量，不改定义。"""
+    return (
+        table.filter(pl.col("candidate"))
+        .group_by(pl.col("level").fill_null(-1).alias("可见档位"))
+        .agg(pl.len().alias("候选数"), pl.col("slice_vol").median().alias("每片量_中位"),
+             pl.col("n_refills").median().alias("轮数_中位"))
+        .sort("可见档位")
+    )
+
+
+def _by_exchange(table: pl.DataFrame) -> pl.DataFrame:
+    """冰山按交易所分开看。**这条条目的可信度本来就分市场**，合起来看等于没看。"""
+    return (
+        table.with_columns(pl.when(pl.col("symbol").str.ends_with(".SH"))
+                           .then(pl.lit("SH")).otherwise(pl.lit("SZ")).alias("交易所"))
+        .group_by("交易所")
+        .agg(pl.len().alias("同幅度链"), pl.col("candidate").sum().alias("候选数"),
+             pl.col("slice_vol").median().alias("每片量_中位"),
+             pl.col("n_cycles").median().alias("循环数_中位"))
+        .sort("交易所")
+    )
+
+
+def _by_refills(table: pl.DataFrame) -> pl.DataFrame:
+    """候选按完成了几轮「成交 → 补单」分组。几轮算多是判断，这里只数几轮。"""
+    hit = table.filter(pl.col("candidate"))
+    if hit.height == 0:
+        return pl.DataFrame({"轮数": [], "组数": [], "每片量_中位": [], "span_ms_中位": []})
+    bucket = (pl.when(pl.col("n_refills") == 1).then(pl.lit("1"))
+              .when(pl.col("n_refills") < 5).then(pl.lit("2-4"))
+              .when(pl.col("n_refills") < 10).then(pl.lit("5-9"))
+              .otherwise(pl.lit("10+")))
+    return (
+        hit.with_columns(bucket.alias("轮数")).group_by("轮数")
+        .agg(pl.len().alias("组数"), pl.col("slice_vol").median().alias("每片量_中位"),
+             pl.col("span_ms").median().alias("span_ms_中位"))
+        .sort("组数", descending=True)
+    )
+
+
+def _by_ticks(table: pl.DataFrame) -> pl.DataFrame:
+    """按离最优价的 tick 数分桶：0（就在最优价）· 1–4 · 5–9 · ≥10 · 无快照可比。
+    分桶只为看分布，不是切割规则——切割规则里出现桶边就是判断。"""
+    col = pl.col("ticks_from_touch_at_nearest_frame")
+    bucket = (
+        pl.when(col.is_null()).then(pl.lit("无快照"))
+        .when(col == 0).then(pl.lit("0 最优价"))
+        .when(col < 5).then(pl.lit("1-4"))
+        .when(col < 10).then(pl.lit("5-9"))
+        .otherwise(pl.lit("10+"))
+    )
+    return (
+        table.with_columns(bucket.alias("bucket")).group_by("bucket")
+        .agg(pl.len().alias("段数"), pl.col("candidate").sum().alias("候选数"),
+             pl.col("peak_vol").median().alias("peak_vol_中位"),
+             pl.col("life_ms").median().alias("life_ms_中位"),
+             pl.col("n_adds").median().alias("n_adds_中位"))
+        .sort("段数", descending=True)
+    )
+
+
+def _by_level(table: pl.DataFrame) -> pl.DataFrame:
+    """按峰值时刻该档位在十档里的第几档分组；−1 = 峰值那一帧它不在十档内（看不见）。"""
+    return (
+        table.group_by(pl.col("level").fill_null(-1).alias("可见档位"))
+        .agg(pl.len().alias("段数"), pl.col("candidate").sum().alias("候选数"),
+             pl.col("peak_vol").median().alias("peak_vol_中位"),
+             pl.col("n_adds").median().alias("n_adds_中位"))
+        .sort("可见档位")
+    )
+
+
+def _by_role(table: pl.DataFrame) -> pl.DataFrame:
+    """三个角色逐条加上去，看每一条各自砍掉多少。
+
+    **这是为了让「第三个角色到底管不管用」变成一个数**：红队说不加「两帧之间无新增委托」，
+    3 秒穿档后的新挂单会被误判成暗单。那就量一量它砍掉了多少，别只是听着有道理。
+    """
+    fills = pl.col("executed_vol") >= pl.col("displayed_vol")
+    survives = pl.col("surviving_vol") > 0
+    quiet = pl.col("added_vol") == 0
+    steps = [
+        ("全部 帧×档位", pl.lit(True)),  # noqa: FBT003
+        ("成交 ≥ 展示量", fills),
+        ("· 且后帧仍在", fills & survives),
+        ("· 且两帧间无新增委托", fills & survives & quiet),
+        ("· 且落在适用时段内（= 候选）", pl.col("candidate")),
+    ]
+    return pl.DataFrame([
+        {"口径": name, "行数": int(table.filter(mask).height),
+         "displayed_vol_中位": table.filter(mask)["displayed_vol"].median(),
+         "frame_gap_ms_中位": table.filter(mask)["frame_gap_ms"].median()}
+        for name, mask in steps
+    ])
+
+
+# ------------------------------------------------------------------ 通用约束
+
+def _within(windows: tuple[Window, ...]) -> pl.Expr:
+    """整段生命周期都落在适用时段内。跨过午休或伸进集合竞价的段不算产出。
+    用 `core.raw.in_windows`，不另写一份时段判断。"""
+    return in_windows("t_start", windows) & in_windows("t_end", windows)
+
+
+def _refuse_gaps(day: Day, gaps: tuple[Gap, ...]) -> None:
+    """样本日缺流就拒绝出数，不静默出一份看起来正常的分布。
+
+    2026-09-03 实测踩到：20220627 只摄取了 orders / trades，没有 xinqing。
+    读取层如实报了 `DAY_MISSING`，而上一版的本函数把 `res.gaps` 整个丢掉，于是
+    「没有快照可比」和「档位不在十档内」都变成 `level = null`，那天的可见档位候选数是 0——
+    一个看起来像行情、其实是缺文件的数。**「查不到 = 没有」被禁止**，这里是它的具体形态。
+    """
+    if gaps:
+        detail = sorted({f"{g.stream}:{g.reason.value}" for g in gaps})
+        raise ValueError(
+            f"{day} 的样本有缺口 {detail}，拒绝出密度：缺流会让「看不见」与「没数据」变成同一个 null。"
+            "先把这一天补齐或把它排除出样本，不要拿这份分布当实测"
+        )

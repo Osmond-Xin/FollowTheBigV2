@@ -356,20 +356,69 @@
 
 <section id="events">
   <h2>五 · 事件层</h2>
-  <div class="empty">
-    <div class="big">空</div>
-    <p style="max-width:56ch">目前<strong>没有任何事件被定义</strong>——<strong>事件注册表为空</strong>。这是全项目最大的一项待定。定义落在注册表（纯逻辑核、进 CI），不落在本表的文字里；本表只记录候选种子与不变量。</p>
-    <p class="note" style="max-width:60ch">事件层的作用：把 5,300 万行/天的逐笔数据坍缩成几万条反常观测，让日常研究彻底脱离 4 IOPS 的外置盘。预估 5–8 GB 常驻内置 SSD——<strong>这个数字是估算，尚未实测</strong>。</p>
+  <p class="note" style="max-width:68ch">事件层的作用：把 5,300 万行/天的逐笔数据坍缩成几万条结构记录，让日常研究彻底脱离 4 IOPS 的外置盘。预估 5–8 GB 常驻内置 SSD——<strong>这个数字是估算，尚未实测</strong>。定义落在注册表 <span class="m">ftbv2.core.registry</span>（纯逻辑核、进 CI、版本 0.5.0），<strong>不落在本表的文字里</strong>；本表只记落盘形态与不变量。</p>
+  <p class="note" style="max-width:70ch"><strong>实测密度也不落在注册表里。</strong>条目只声明目标（条数上界 + 坍缩比下界）；量出来的数字住在收据里，由 <span class="m">admit_full_extraction()</span> 在下发全量前比对。实测值进静态源码就要求有人反向修改源码文件，与「代码保持只读」和收据机制死锁（2026-09-03 架构红队）。</p>
+  <p class="note" style="max-width:70ch"><strong>真正的成本约束是整张表的合计，不是单条的上界</strong>（2026-09-03 用户裁定后重新推导）。<span class="m">REGISTRY_ROW_BUDGET = 100</span> 条/(标的·日)，来自：事件层常驻预算 8 GB ÷ 每行约 25 字节 ≈ 3.44 亿行 ÷ (约 3000 标的 × 1122 交易日) ≈ 102。<strong>两个输入都是估算</strong>——8 GB 本节开头已注明未实测，25 字节/行也没实测过，所以 100 <strong>是一个预算分配决定，不是一个测量结果</strong>。单条上界 50 = 预算的一半，只防「一条吃掉半个预算」；合计由 <span class="m">admit_registry()</span> 算，且**未实测的条目让它拒绝**——把没测的按零计入等于假装它们不占地方。</p>
+
+  <h3>第一批条目（注册表 0.5.0 · 每类一张表，表名 = <span class="m">kind</span>）</h3>
+  <p class="note" style="max-width:70ch">选择标准不是「便宜」，是<strong>每类提取器至少一条</strong>。四条全部声明：适用时段（连续竞价两段，排除开盘集合竞价）· 排序键（<span class="m">time_ms + 源行序</span>，<strong>不用</strong>缺陷账本里已登记为整列空 / 稀疏重复的 <span class="m">trades.seq</span>）· 不变量码（每条挂一段可跑的谓词与最小反例，不再是一句话）· 对照裁决出处。<strong>四条里只有假墙测过密度</strong>，另两条结构事件仍是诚实的未知——<span class="m">admit_full_extraction()</span> 会拦住它们进入全量提取。</p>
+  <div class="scroll"><table>
+    <thead><tr><th>kind（表名）</th><th>类别 / 型</th><th>回看</th><th>stream</th><th>跨行结构关系（角色 → 不变量码）</th><th>几何度量</th><th>密度</th></tr></thead>
+    <tbody>
+      <tr><td><span class="m">LevelBuildThenVanish</span><br><span class="note">假墙</span></td><td>结构事件<br>区间</td><td>日内</td><td>orders + trades<br>+ xinqing</td><td>建墙委托 · 拆墙撤单 · 存续期间的成交 · <strong>峰值时刻的十档快照</strong> → <span class="m">returns_to_zero</span> ∧ <span class="m">no_trades_during_life</span> ∧ <span class="m">visible_in_quoted_depth_at_peak</span> ∧ <span class="m">built_by_multiple_orders</span>。深度由 orders / trades 全量重建，<strong>不看十档有没有把它挤出去</strong>——价格移动让挂单跌出十档但它仍在队列里，那不是消失</td><td>side · price · peak_vol · n_orders · n_cancels · build_ms · life_ms · teardown_ms · <strong>level_at_peak</strong> · ticks_from_touch_at_nearest_frame · frame_age_ms</td><td class="num hit"><strong>3.68</strong><br><span class="note">条/(标的·日)<br>坍缩 15,926×<br>21 天 × 200 标的</span></td></tr>
+      <tr><td><span class="m">RefillAfterFill</span><br><span class="note">冰山</span></td><td>结构事件<br>组</td><td>日内</td><td>orders + trades</td><td>被成交耗尽的委托 · 耗尽它的成交 · 同价同量的补单 → <span class="m">refill_strictly_after_fill</span> ∧ <span class="m">slice_exceeds_min_lot</span>：三者按时序咬合并至少重复一轮，<strong>补单必须严格发生在成交之后</strong>，<strong>且每片超过一手</strong>（<span class="m">core.raw.LOT_SIZE</span>，交易所定的最小委托单位——<strong>一手不能再切，所以一手的重复挂单不是切片的证据</strong>）。结组由交易所状态边界闭合（午休 / 收盘集合竞价 / 停牌 / 当日结束），<strong>不写「隔了 T 久没补就结组」</strong></td><td>side · price · slice_vol · n_refills · total_filled · span_ms · <strong>close_reason</strong></td><td class="num"><strong>55.25</strong><br><span class="note">坍缩 1,061 ✅<br>加「每片超过一手」后<br>（原 218.92 / 268）<br>条数略超护栏 50，待裁</span></td></tr>
+      <tr><td><span class="m">FillExceedsDisplayed</span><br><span class="note">隐藏深度</span></td><td>结构事件<br>时刻</td><td>日内</td><td>xinqing + trades<br>+ <strong>orders</strong></td><td>前帧该档展示量 · 两帧之间该档成交 · <strong>两帧之间该档新增的委托</strong> · 后帧该档仍然存在 → <span class="m">fill_reaches_displayed</span> ∧ <span class="m">level_survives_next_frame</span> ∧ <span class="m">no_new_orders_between_frames</span>。第三条是「幸存即隐藏」的必要补丁：3 秒一帧里价格可以穿过该档再被<strong>新挂单</strong>撑住，那时「活着」的是新来的人，不是暗单</td><td>side · price · displayed_vol · executed_vol · surviving_vol · <strong>added_vol</strong> · frame_gap_ms</td><td class="num"><strong>32.68</strong><br><span class="note">坍缩 1,793×<br>21 天 × 200 标的<br>准入通过（上界重定后）</span></td></tr>
+      <tr><td><span class="m">VolClockBar</span><br><span class="note">成交量时钟</span></td><td><strong>尺子</strong><br>区间</td><td>跨日<br><span class="m">lookback_days=20</span><br>读 <span class="m">daily_ref.amount</span></td><td>trades</td><td>bar 起点成交 · bar 内全部成交 · 跨过刻度的那一笔 → <span class="m">volume_crosses_tick</span>：累计<strong>成交额</strong>首次跨过 <span class="m">tick_amount</span> 即为终点。<strong>刻度用成交额不用成交量</strong>：高送转当日成交股数在同等资金下天然翻倍，用未复权的成交量做刻度会让当日切出近百根 bar。冷启动不足 20 日<strong>显式记缺口</strong>，不产 bar</td><td>bar_index · amount · volume · vwap · n_trades · <strong>termination</strong><br><span class="note">刻度 = 日均额 ÷ <span class="m">bars_per_day</span>=48</span></td><td class="num">不适用<br><span class="note">尺子的条数由采样分辨率决定，对它谈稀有性没有意义</span></td></tr>
+      <tr><td><span class="m">DayBoundary</span><br><span class="note">日界 / 安静日</span></td><td colspan="4"><strong>不是注册表条目</strong>——驱动层从 交易日历 × 标的主表 × 摄取收据的叉积产生。<span class="m">coverage_status</span> 用 <span class="m">CoverageStatus</span> 枚举（covered / partial / absent），<span class="m">gap_codes</span> 复用缺陷账本的 <span class="m">DefectCode</span>（CI 已校验它等于账本 code 集合）</td><td>coverage_status · gap_codes · n_events · quiet_span_ms</td><td class="num">每 (标的,日) 恰好 1 条</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="warn"><span class="h">2026-09-03 审计：上一版的假墙与冰山是过滤，不是提取</span>
+    <p><strong>过滤</strong>挑出满足某属性的<strong>单条</strong>原始记录——行数少一点，信息密度一点没变，每条事件仍对应一条原始行，等于把 orders 表挪了个地方。<strong>提取</strong>找出<strong>多条</strong>原始记录之间的结构关系，把它们坍缩成一条。这才降维。</p>
+    <p>上一版 <span class="m">QuoteThenWithdraw</span>「一笔委托被整笔撤销」——撤单标志就写在那一行上，不必看任何别的行，坍缩比 1:1。上一版 <span class="m">Seq_RepeatedSamePxVol</span>「同价同量连着报两笔」——密集报单里满地都是，与是否成交无关，切出来的不是冰山。<strong>两条都只读 orders 一流：正因为没看成交，切出来的不是那个结构。</strong></p>
+    <p>结构性的防线（<span class="m">ftbv2.core.registry</span>，违反即构造失败）：<span class="m">Relation.roles</span> 至少两个角色（单行过滤只说得出一个）；<span class="m">Relation.invariants</span> 非空且每条码挂一段可跑的谓词；<span class="m">DensityTarget.min_collapse_ratio</span> 必须 &gt; 1（写成 1 等于没有下界），实测由准入比对；<span class="m">admit_registry()</span> 拒绝把未实测的条目按零计入合计（坍缩比要<strong>实测</strong>，1:1 会在数字上暴露，赖不掉）；<span class="m">Param.value</span> 必须是数而不是一句描述（上一版的刻度写成「日均值」，照它跑一天只有一根 bar，而 28 个测试全绿）；几何度量名带 <span class="m">rank / score / 分位 / 阈值</span> 一律构造失败（判断不进事件流）。</p>
   </div>
 
-  <div class="warn"><span class="h">定义事件时必须守的一条</span>
-    <p><strong>事件只回答「这是不是统计上反常」，绝不回答「这是不是庄」。</strong></p>
-    <p>提取一次要扫 2.585 TB（约 15 小时），判断一旦写进去就被锁死在一个极难重跑的位置。所以记录<strong>统计量</strong>，<strong>不记录语义标签</strong>。语义判断留在因子层，那一层改起来是秒级的。</p>
+  <div class="warn"><span class="h">2026-09-03 实测：假墙的那一刀是可见性，不是「到过最优价」</span>
+    <p>21 个交易日 × 200 只随机主板标的 = 4200 标的·日，读入 2.46 亿行，切出 133 万个档位生命周期。收据 <span class="m">4c4e199a…5028</span>，详见 <span class="m">design-log/2026-09-03-假墙可见性回归.md</span>。</p>
+    <p><strong>按峰值时刻在不在十档内分开，两类形态完全不同，不是程度差别</strong>：十档外 106.5 万段（79.9%），中位 <strong>5 笔</strong>委托堆起 <strong>5,400 股</strong>——深处零散挂单被撤；十档内 31.5 万段，几十笔堆起两万到六万股。中位量差 3–10 倍，笔数差 6–11 倍。附带事实：十档内 <span class="m">peak_vol</span> 随档位加深<strong>单调上升</strong>（第 1 档 1.7 万 → 第 9 档 5.7 万），这是待解释的事实，不是结论。</p>
+    <p><strong>三种切法的密度</strong>：不切 43 条/(标的·日)，八成与「墙」无关；按可见性切 <strong>3.68</strong> 条，坍缩 15,926 倍；按「必须到过最优价」切只剩约 1.6 条——<strong>数据否定了后一刀，98% 的结构被扔掉</strong>。逐日 2.34–6.45，2.8 倍摆动，无量级跳变。外推全语料约 1,200 万条。</p>
+    <p><strong>可见性是结构约束不是幅度阈值</strong>：十档是交易所定的发布范围，不是我们选的一个数；在或不在，没有程度。一句话——<strong>看不见的墙吓不到人</strong>。「离最优价几个 tick」仍然记进事件流，只是不拿它当切割规则。</p>
   </div>
 
-  <div class="ok"><span class="h">事件流的不变量（属于接口，因子的合成夹具与真实流都必须满足）</span>
-    <p>① 按 (标的, 时间) 有序。② <strong>每个 (标的, 交易日) 至少一条日界事件</strong>——不含反常统计，只标记该标的该日结束；没有任何反常的安静日也让因子状态机前进一步，因子在日界事件上产出该 (标的, 日) 的值。③ <strong>安静 ≠ 缺口</strong>：安静 = 有数据、无反常（有日界事件）；缺口 = 数据不存在（无日界事件，必带归因码，是下游纯核入口的必需参数）。</p>
-    <p><strong>三类参数，各有唯一住所</strong>：切割规则所用的<strong>提取参数</strong>（分位点、窗长、最小持续时长）→ 事件注册表，进证据指纹，假设不得修改；判断阈值与因子参数 → 预注册；白名单字面量 0 / 1 / −1。<strong>事件流版本</strong> = 注册表版本 + 提取参数集 + 数据清单摘要，每个假设必须声明。</p>
+  <div class="warn"><span class="h">2026-09-03 实测：隐藏深度的第三个角色值 87.5%，但这条结构没通过准入</span>
+    <p>同一协议（21 天 × 200 标的）。收据 <span class="m">879237aa…5888</span>，详见 <span class="m">design-log/2026-09-03-隐藏深度密度回归.md</span>。</p>
+    <p><strong>红队要求补的「两帧之间该档无新增委托」是对的，用处很大</strong>：三个角色逐条加上去——全部帧×档位 3.30 亿 → 成交 ≥ 展示量 430 万 → 且后帧仍在 111.7 万 → <strong>且两帧间无新增委托 13.9 万（砍掉 87.5%）</strong>。不加这一条，八成八的「隐藏深度」其实是三秒里价格穿过该档之后被<strong>新挂单</strong>重新撑住，「活着」的是新来的人。这句话原本只是听着有道理，现在它是一个数。代价是必须加读 orders 流——单靠快照 + 成交物理上判不出来。</p>
+    <p><strong>它第一次撞上了准入</strong>：32.68 条/(标的·日) 超过当时的上界 30（逐日 26.1–39.6，不是某天爆量，是整体就在上界附近）。坍缩比 1,793 过关。<strong>候选的展示量中位只有 800 股</strong>，而全部帧×档位是 16,400 股——这批「隐藏深度」绝大多数发生在八手的小档位上：档位越小越容易被一笔单吃穿，「成交 ≥ 展示量」几乎自动成立。结构本身没错，但它<strong>在小档位上退化成了噪声</strong>。</p>
+    <p><strong>用户裁定动上界（2026-09-03）</strong>——动的是<strong>上界的出处</strong>，不是把数字调到能过。原来的「10–30」写在一句项目背景里、没有推导过程，红队方法论致命 1 已判为「未经预注册却当机械门禁的验收基线」。新口径从常驻预算推导（见本节开头），并把真正的约束移到<strong>整张表的合计</strong>上。改这两个数会改 <span class="m">digest()</span>，必须同时改 <span class="m">REGISTRY_VERSION</span>（0.3.0 → 0.4.0）。<strong>「小档位上退化成噪声」这件事没有被这次改动解决</strong>，它仍然是一条待处理的结构问题，记在 design-log 里。</p>
+  </div>
+
+  <div class="warn"><span class="h">2026-09-03 实测：冰山切得太宽（三关全不过），且假墙那一刀在这里不管用</span>
+    <p>同一协议（21 天 × 200 标的）。收据 <span class="m">805972c1…0865</span>，详见 <span class="m">design-log/2026-09-03-冰山密度回归.md</span>。前一趟在另一棵源码树上跑出<strong>完全相同</strong>的 218.92 / 919,445 条，是一次免费的可复现性核对。</p>
+    <p><strong>密度 218.92 条/(标的·日)，坍缩 268</strong>：超过单条上界 50，<strong>它一条就超过整张表的预算 100 一倍</strong>，坍缩比也不到下界 1000。逐日 151–287，三关全不过，不是边缘情况。</p>
+    <p><strong>每片量中位 = 100 股 = 一手，而且在每一个可见档位桶、每一个轮数桶里都是 100。</strong>一手的委托被吃掉、又来一笔一手的委托——这在连续竞价里每秒都在发生，它不是「切片下单」，因为<strong>一手是不能再切的</strong>。55% 的候选只完成了一轮，中位跨度 6.9 秒。</p>
+    <p><strong>假墙那一刀（十档内可见）拿到这里不管用——这是个有用的否定结果。</strong>只砍掉 52.5%（218.92 → 104.00，仍超预算），更要命的是<strong>它没有分开两类东西</strong>：十档内与十档外的每片量中位都是 100 股、轮数中位都是 1，而假墙那次两边差 3–10 倍。可见性对假墙有效是因为「看不见的墙吓不到人」——那条结构的意义本身依赖被看见；<strong>冰山不依赖，藏起来才是它的意义</strong>。同一把刀切不同的结构，不该指望一样的效果。</p>
+    <p>按规矩回到设计，不是改上界。⚠️ <strong>「轮数 ≥ 3」不是路</strong>：条目自己写着「一轮即成立，≥ 3 才是判断，归因子层」，把 k 从 10 改成 3 正是 V1 §C 的错误（<span class="m">REP_MIN=10</span> 是错代理，96% 的触发来自它）。</p>
+    <p class="hit"><strong>2026-09-03 裁定走「每片量不得是最小交易单位」</strong>，理由与十档那一刀同构：一手是<strong>交易所定的最小委托单位</strong>（<span class="m">core.raw.LOT_SIZE</span>），不是我们从分布里挑出来的数。重测（收据 <span class="m">a31374cf…54d0</span>，注册表 0.5.0）：<strong>218.92 → 55.25 条/(标的·日)（砍掉 74.8%），坍缩 268 → 1,061（过关）</strong>，每片量中位从 100 升到 300。⚠️ 这一条与别的不变量<strong>性质不同</strong>——它是对「切片」这个单位本身的前置条件，是<strong>组的属性</strong>不是角色之间的关系；降维的担子仍由 <span class="m">refill_strictly_after_fill</span> 挑，如实记在谓词表的 docstring 里。</p>
+    <p><strong>剩下的差距是一个待裁的问题，不是一个待修的 bug</strong>：单条上界 50 是预算的一半、声明用途是「只防一条吃掉半个预算」；现在冰山占 55.2%（略过一半），而<strong>整张表的合计 91.61 装得下</strong>。机制照写的判是「单条拒、合计过」。要问的不是「要不要放宽预算」，而是<strong>「护栏该不该在真约束已经过关时硬拒」</strong>——两个不同的问题，别混。见 design-log 第六节。</p>
+  </div>
+
+  <div class="warn"><span class="h">2026-09-03 实测推翻了上一版关于上交所关联率的结论</span>
+    <p>上一版记的是「trades→orders 关联率上交所单边 57% / 双边 14%，深交所 86% / 72% ⇒『某一笔本方委托被成交耗尽』在上交所不可靠」。</p>
+    <div class="scroll"><table>
+      <thead><tr><th>交易所</th><th><span class="m">ask_ref</span></th><th><span class="m">bid_ref</span></th><th>双边都关联上</th><th><strong>被动方那一边</strong></th></tr></thead>
+      <tbody>
+        <tr><td>SH</td><td class="num">60.18%</td><td class="num">51.81%</td><td class="num">11.99%</td><td class="num hit"><strong>99.89%</strong></td></tr>
+        <tr><td>SZ</td><td class="num">100%</td><td class="num">100%</td><td class="num">100%</td><td class="num hit"><strong>99.91%</strong></td></tr>
+      </tbody>
+    </table></div>
+    <p><strong>上交所只有被动方那个号是委托号，主动方那个不是。</strong>上一版量的是「单边 / 双边」——一个<strong>混了主被动的聚合</strong>，所以上交所看起来只有 57%。而冰山要的恰好就是被动方（<strong>「本方委托」就是挂在那里被吃的那一笔</strong>），它在两个市场上都是 99.9%。</p>
+    <p>⇒「冰山在上交所不可靠」这个判断被推翻。该查是对的（红队指对了方向），但查出来的数被用错了口径，于是得出了一个反向的结论。<strong>教训：一个关联率必须说清楚关联的是哪一边</strong>——「57%」本身没错，错在它回答的不是我们要问的问题。</p>
+  </div>
+
+  <div class="warn"><span class="h">这次回归撞出来的两个缺陷（都是「查不到 = 没有」的变体）</span>
+    <p><strong>缺流被当成了「看不见」。</strong>第一次扫 22 天，其中 2022-06-27 只摄取了 orders / trades，没有 xinqing。那天算出的可见候选数是 <strong>0</strong>——看起来像极端行情，其实是缺文件。读取层如实报了 <span class="m">Gap(DAY_MISSING, xinqing)</span>，而 <span class="m">probe_walls</span> 把 <span class="m">res.gaps</span> 整个丢掉，于是「没有快照可比」与「档位不在十档内」都变成 <span class="m">level = null</span>。已改为缺流即拒绝出数，样本从 22 天改为 21 天。</p>
+    <p><strong>适用时段下推错了层。</strong>条目声明连续竞价两段，第一版实现把它下推给 <span class="m">ReadRequest</span>，结果关联不上的撤单从 0.041% 跳到 <strong>1.31%</strong>。根因：假墙是<strong>日内型</strong>，盘口深度必须从开盘逐笔累积，集合竞价里挂下、连续竞价里才撤的委托也在队列里。<strong>适用时段约束的是产出，不是读取</strong>：三流照读全天，只把整段生命周期落在窗内的段算作产出。这个缺陷是被 <span class="m">unlinked_cancels</span> 抓住的——它存在的理由就是「缺口不是零」。</p>
   </div>
 
   <h3>V1 最大的信息回收空间：事件本身从未被持久化</h3>

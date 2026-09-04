@@ -22,6 +22,16 @@ CSV_NAME: dict[Stream, str] = {"xinqing": "行情.csv", "orders": "逐笔委托.
 
 SYMBOL_COL = "_symbol"          # preserve 文件里标识行所属标的的列，值如 "002783.SZ"
 PRICE_SCALE = 10_000            # 价格 = 元 × 10000 整数定点（数据表第三节；20220104 茅台 ask1 锚点）
+
+LOT_SIZE = 100
+"""一手 = 100 股：**交易所定的最小委托单位**，不是我们选的一个数。
+
+与 `PRICE_SCALE`、十档发布范围同类——都是市场的结构常数，不是参数。
+买入委托必须是它的整数倍；卖出允许零股（不足一手的余数），那也是「再切不下去」的一端。
+
+它的用途是让「一手不能再切，所以一手的重复挂单不是切片的证据」成为一句**结构**判断
+而不是一个幅度阈值（2026-09-03 用户裁定，见 design-log 冰山那篇）。
+写在这里而不是写在用它的地方：口径单源，谁要用谁来取。"""
 ROW_GROUP_ROWS = 122_880        # 与现有 preserve 文件一致（数据表第二节实测），单标的一天只碰约 2 个 row group
 
 # 摄取的前缀筛选（立项讨论 Q15；2026-09-02 用户裁定沿用 V1）：只存主板。这是「不得在未声明样本宇宙前删除行」
@@ -81,7 +91,19 @@ FIELDS: dict[Stream, tuple[Field, ...]] = {
         Field("symbol", SYMBOL_COL, "symbol"),
         Field("time_ms", "column_4", "time"),
         Field("last_price", "column_5", "price"),
+        # 以下九列 2026-09-03 按 V2 摄取 manifest 里的 CSV 表头原文登记（万得行情：成交量,成交额,成交笔数,…,当日累计成交量,当日成交额,最高价,最低价,开盘价,前收盘,…,叫卖总量,叫买总量）
+        Field("tick_vol", "column_6", "int"),        # 本帧成交量（股）
+        Field("tick_amt", "column_7", "int"),        # 本帧成交额（元）
+        Field("n_trades", "column_8", "int"),        # 成交笔数（累计）
+        Field("cum_vol", "column_12", "int"),        # 当日累计成交量（股）
+        Field("cum_amt", "column_13", "int"),        # 当日成交额（元）；超 int32，必须 int64
+        Field("high", "column_14", "price"),
+        Field("low", "column_15", "price"),
+        Field("open", "column_16", "price"),
+        Field("prev_close", "column_17", "price"),
         *_ob("ask_px", 18), *_ob("ask_sz", 28), *_ob("bid_px", 38), *_ob("bid_sz", 48),
+        Field("ask_total", "column_60", "int"),      # 叫卖总量（全簿，不止十档）
+        Field("bid_total", "column_61", "int"),      # 叫买总量
     ),
 }
 

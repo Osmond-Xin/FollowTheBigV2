@@ -1,0 +1,9 @@
+| factor | horizon | 2025 | 2026 |
+| --- | --- | --- | --- |
+| amt_share_closecall | fwd_10 | -0.0385 | -0.0480 |
+| amt_share_closecall | fwd_20 | -0.0469 | -0.0560 |
+| f_lot1 | fwd_20 | 0.0926 | 0.0555 |
+| imb10_closecall | fwd_20 | 0.0616 | 0.0528 |
+| r_share_b2 | fwd_10 | -0.0652 | -0.0535 |
+| r_share_b2 | fwd_20 | -0.0749 | -0.0498 |
+| t_amt_share_close_call | fwd_20 | -0.0457 | -0.0550 |

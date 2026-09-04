@@ -1,0 +1,1228 @@
+{
+ "args": {
+  "day": "[datetime.date(2022, 1, 4), datetime.date(2022, 1, 5), datetime.date(2022, 1, 6), datetime.date(2022, 1, 7), datetime.date(2022, 1, 10), datetime.date(2022, 1, 11), datetime.date(2022, 1, 12), datetime.date(2022, 1, 13), datetime.date(2022, 1, 14), datetime.date(2022, 1, 17), datetime.date(2022, 1, 18), datetime.date(2022, 1, 19), datetime.date(2022, 1, 20), datetime.date(2022, 1, 21), datetime.date(2022, 1, 24), datetime.date(2022, 1, 25), datetime.date(2022, 1, 26), datetime.date(2022, 1, 27), datetime.date(2022, 1, 28), datetime.date(2022, 2, 7), datetime.date(2022, 5, 5)]",
+  "kind": "FillExceedsDisplayed",
+  "ledger": "ledger/defects.toml",
+  "root": "/Volumes/xin/FollowTheBigV2-raw",
+  "sample": "200",
+  "seed": "0"
+ },
+ "inputs": {
+  "days": "2022-01-04,2022-01-05,2022-01-06,2022-01-07,2022-01-10,2022-01-11,2022-01-12,2022-01-13,2022-01-14,2022-01-17,2022-01-18,2022-01-19,2022-01-20,2022-01-21,2022-01-24,2022-01-25,2022-01-26,2022-01-27,2022-01-28,2022-02-07,2022-05-05",
+  "input_manifest_sha256": "c74c581adb29c6ac434cc3f63944d0559e22f81f0da008ae08caff7fb2b1e8fe",
+  "kind": "FillExceedsDisplayed",
+  "ledger": "5b754cc01730ec0f66bd245b3e9af087cb22ae877b1856660d16724880769fbc",
+  "root": "/Volumes/xin/FollowTheBigV2-raw",
+  "spec_digest": "ad98033ac712c1f7"
+ },
+ "kind": "probe_density",
+ "outputs": {},
+ "receipt_id": "7cb50ca119accb1d99261557f4ec5d491ca665ae223c559e38ee6f6cd35b77ad",
+ "source_diff_sha256": "",
+ "source_dirty": "false",
+ "source_tree": "dd7e6951d722258421686db9ebb32c997756907d",
+ "summary": {
+  "collapse_ratio": 1792.7301376848548,
+  "concentration": {
+   "max_per_symbol": 196.3333,
+   "top_decile_share": 0.3356,
+   "zero_share": 0.0245
+  },
+  "days": [
+   "2022-01-04",
+   "2022-01-05",
+   "2022-01-06",
+   "2022-01-07",
+   "2022-01-10",
+   "2022-01-11",
+   "2022-01-12",
+   "2022-01-13",
+   "2022-01-14",
+   "2022-01-17",
+   "2022-01-18",
+   "2022-01-19",
+   "2022-01-20",
+   "2022-01-21",
+   "2022-01-24",
+   "2022-01-25",
+   "2022-01-26",
+   "2022-01-27",
+   "2022-01-28",
+   "2022-02-07",
+   "2022-05-05"
+  ],
+  "input_rows": 246088066,
+  "invariants": [
+   "fill_reaches_displayed",
+   "level_survives_next_frame",
+   "no_new_orders_between_frames"
+  ],
+  "kind": "FillExceedsDisplayed",
+  "n_candidates": 137270,
+  "n_rows": 329514835,
+  "per_day": [
+   {
+    "concentration": {
+     "max_per_symbol": 197.0,
+     "top_decile_share": 0.3378,
+     "zero_share": 0.03
+    },
+    "day": "2022-01-04",
+    "distributions": {
+     "by_role": [
+      {
+       "displayed_vol_中位": 24000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "全部 帧×档位",
+       "行数": 16566200
+      },
+      {
+       "displayed_vol_中位": 900.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "成交 ≥ 展示量",
+       "行数": 238635
+      },
+      {
+       "displayed_vol_中位": 1000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且后帧仍在",
+       "行数": 63463
+      },
+      {
+       "displayed_vol_中位": 900.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且两帧间无新增委托",
+       "行数": 7128
+      },
+      {
+       "displayed_vol_中位": 800.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且落在适用时段内（= 候选）",
+       "行数": 7033
+      }
+     ]
+    },
+    "extra": {
+     "total_cancels": 1756341,
+     "unlinked_cancels": 0
+    },
+    "n_candidates": 7033,
+    "n_rows": 16566200,
+    "n_symbols": 200,
+    "rows_read": {
+     "orders": 7126960,
+     "trades": 5943871,
+     "xinqing": 857802
+    },
+    "seconds": 37.8
+   },
+   {
+    "concentration": {
+     "max_per_symbol": 207.0,
+     "top_decile_share": 0.317,
+     "zero_share": 0.02
+    },
+    "day": "2022-01-05",
+    "distributions": {
+     "by_role": [
+      {
+       "displayed_vol_中位": 16000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "全部 帧×档位",
+       "行数": 16705502
+      },
+      {
+       "displayed_vol_中位": 900.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "成交 ≥ 展示量",
+       "行数": 254854
+      },
+      {
+       "displayed_vol_中位": 1000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且后帧仍在",
+       "行数": 66861
+      },
+      {
+       "displayed_vol_中位": 900.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且两帧间无新增委托",
+       "行数": 7877
+      },
+      {
+       "displayed_vol_中位": 800.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且落在适用时段内（= 候选）",
+       "行数": 7764
+      }
+     ]
+    },
+    "extra": {
+     "total_cancels": 1699096,
+     "unlinked_cancels": 0
+    },
+    "n_candidates": 7764,
+    "n_rows": 16705502,
+    "n_symbols": 200,
+    "rows_read": {
+     "orders": 6951497,
+     "trades": 5862812,
+     "xinqing": 856689
+    },
+    "seconds": 40.0
+   },
+   {
+    "concentration": {
+     "max_per_symbol": 305.0,
+     "top_decile_share": 0.3671,
+     "zero_share": 0.035
+    },
+    "day": "2022-01-06",
+    "distributions": {
+     "by_role": [
+      {
+       "displayed_vol_中位": 22100.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "全部 帧×档位",
+       "行数": 14958427
+      },
+      {
+       "displayed_vol_中位": 1000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "成交 ≥ 展示量",
+       "行数": 196394
+      },
+      {
+       "displayed_vol_中位": 1000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且后帧仍在",
+       "行数": 51706
+      },
+      {
+       "displayed_vol_中位": 800.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且两帧间无新增委托",
+       "行数": 6714
+      },
+      {
+       "displayed_vol_中位": 800.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且落在适用时段内（= 候选）",
+       "行数": 6620
+      }
+     ]
+    },
+    "extra": {
+     "total_cancels": 1495870,
+     "unlinked_cancels": 11823
+    },
+    "n_candidates": 6620,
+    "n_rows": 14958427,
+    "n_symbols": 200,
+    "rows_read": {
+     "orders": 5880469,
+     "trades": 4840197,
+     "xinqing": 767221
+    },
+    "seconds": 36.0
+   },
+   {
+    "concentration": {
+     "max_per_symbol": 179.0,
+     "top_decile_share": 0.3351,
+     "zero_share": 0.04
+    },
+    "day": "2022-01-07",
+    "distributions": {
+     "by_role": [
+      {
+       "displayed_vol_中位": 21200.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "全部 帧×档位",
+       "行数": 16443901
+      },
+      {
+       "displayed_vol_中位": 1000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "成交 ≥ 展示量",
+       "行数": 198898
+      },
+      {
+       "displayed_vol_中位": 1100.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且后帧仍在",
+       "行数": 51024
+      },
+      {
+       "displayed_vol_中位": 900.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且两帧间无新增委托",
+       "行数": 6621
+      },
+      {
+       "displayed_vol_中位": 800.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且落在适用时段内（= 候选）",
+       "行数": 6506
+      }
+     ]
+    },
+    "extra": {
+     "total_cancels": 1612040,
+     "unlinked_cancels": 0
+    },
+    "n_candidates": 6506,
+    "n_rows": 16443901,
+    "n_symbols": 200,
+    "rows_read": {
+     "orders": 6348530,
+     "trades": 5327861,
+     "xinqing": 848390
+    },
+    "seconds": 40.1
+   },
+   {
+    "concentration": {
+     "max_per_symbol": 198.0,
+     "top_decile_share": 0.3435,
+     "zero_share": 0.035
+    },
+    "day": "2022-01-10",
+    "distributions": {
+     "by_role": [
+      {
+       "displayed_vol_中位": 21300.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "全部 帧×档位",
+       "行数": 15388329
+      },
+      {
+       "displayed_vol_中位": 1000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "成交 ≥ 展示量",
+       "行数": 199793
+      },
+      {
+       "displayed_vol_中位": 1000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且后帧仍在",
+       "行数": 52246
+      },
+      {
+       "displayed_vol_中位": 800.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且两帧间无新增委托",
+       "行数": 6312
+      },
+      {
+       "displayed_vol_中位": 800.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且落在适用时段内（= 候选）",
+       "行数": 6232
+      }
+     ]
+    },
+    "extra": {
+     "total_cancels": 1491862,
+     "unlinked_cancels": 0
+    },
+    "n_candidates": 6232,
+    "n_rows": 15388329,
+    "n_symbols": 200,
+    "rows_read": {
+     "orders": 5922870,
+     "trades": 4900549,
+     "xinqing": 791083
+    },
+    "seconds": 37.3
+   },
+   {
+    "concentration": {
+     "max_per_symbol": 189.0,
+     "top_decile_share": 0.353,
+     "zero_share": 0.02
+    },
+    "day": "2022-01-11",
+    "distributions": {
+     "by_role": [
+      {
+       "displayed_vol_中位": 19700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "全部 帧×档位",
+       "行数": 15893853
+      },
+      {
+       "displayed_vol_中位": 1000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "成交 ≥ 展示量",
+       "行数": 177308
+      },
+      {
+       "displayed_vol_中位": 1000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且后帧仍在",
+       "行数": 45906
+      },
+      {
+       "displayed_vol_中位": 700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且两帧间无新增委托",
+       "行数": 6169
+      },
+      {
+       "displayed_vol_中位": 700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且落在适用时段内（= 候选）",
+       "行数": 6062
+      }
+     ]
+    },
+    "extra": {
+     "total_cancels": 1584917,
+     "unlinked_cancels": 0
+    },
+    "n_candidates": 6062,
+    "n_rows": 15893853,
+    "n_symbols": 200,
+    "rows_read": {
+     "orders": 6109698,
+     "trades": 4972084,
+     "xinqing": 815740
+    },
+    "seconds": 36.3
+   },
+   {
+    "concentration": {
+     "max_per_symbol": 163.0,
+     "top_decile_share": 0.3349,
+     "zero_share": 0.025
+    },
+    "day": "2022-01-12",
+    "distributions": {
+     "by_role": [
+      {
+       "displayed_vol_中位": 21600.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "全部 帧×档位",
+       "行数": 15825015
+      },
+      {
+       "displayed_vol_中位": 1000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "成交 ≥ 展示量",
+       "行数": 174978
+      },
+      {
+       "displayed_vol_中位": 1000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且后帧仍在",
+       "行数": 45346
+      },
+      {
+       "displayed_vol_中位": 800.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且两帧间无新增委托",
+       "行数": 6400
+      },
+      {
+       "displayed_vol_中位": 800.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且落在适用时段内（= 候选）",
+       "行数": 6294
+      }
+     ]
+    },
+    "extra": {
+     "total_cancels": 1541907,
+     "unlinked_cancels": 0
+    },
+    "n_candidates": 6294,
+    "n_rows": 15825015,
+    "n_symbols": 200,
+    "rows_read": {
+     "orders": 5944682,
+     "trades": 4824445,
+     "xinqing": 808706
+    },
+    "seconds": 36.5
+   },
+   {
+    "concentration": {
+     "max_per_symbol": 142.0,
+     "top_decile_share": 0.3324,
+     "zero_share": 0.045
+    },
+    "day": "2022-01-13",
+    "distributions": {
+     "by_role": [
+      {
+       "displayed_vol_中位": 22200.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "全部 帧×档位",
+       "行数": 15468794
+      },
+      {
+       "displayed_vol_中位": 1000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "成交 ≥ 展示量",
+       "行数": 165441
+      },
+      {
+       "displayed_vol_中位": 1000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且后帧仍在",
+       "行数": 41420
+      },
+      {
+       "displayed_vol_中位": 800.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且两帧间无新增委托",
+       "行数": 5965
+      },
+      {
+       "displayed_vol_中位": 800.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且落在适用时段内（= 候选）",
+       "行数": 5885
+      }
+     ]
+    },
+    "extra": {
+     "total_cancels": 1321524,
+     "unlinked_cancels": 0
+    },
+    "n_candidates": 5885,
+    "n_rows": 15468794,
+    "n_symbols": 200,
+    "rows_read": {
+     "orders": 5132700,
+     "trades": 4195211,
+     "xinqing": 797901
+    },
+    "seconds": 36.3
+   },
+   {
+    "concentration": {
+     "max_per_symbol": 163.0,
+     "top_decile_share": 0.3029,
+     "zero_share": 0.025
+    },
+    "day": "2022-01-14",
+    "distributions": {
+     "by_role": [
+      {
+       "displayed_vol_中位": 14700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "全部 帧×档位",
+       "行数": 16239012
+      },
+      {
+       "displayed_vol_中位": 900.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "成交 ≥ 展示量",
+       "行数": 229969
+      },
+      {
+       "displayed_vol_中位": 900.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且后帧仍在",
+       "行数": 58719
+      },
+      {
+       "displayed_vol_中位": 800.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且两帧间无新增委托",
+       "行数": 7496
+      },
+      {
+       "displayed_vol_中位": 800.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且落在适用时段内（= 候选）",
+       "行数": 7415
+      }
+     ]
+    },
+    "extra": {
+     "total_cancels": 1648380,
+     "unlinked_cancels": 1398
+    },
+    "n_candidates": 7415,
+    "n_rows": 16239012,
+    "n_symbols": 200,
+    "rows_read": {
+     "orders": 6518170,
+     "trades": 5407081,
+     "xinqing": 826673
+    },
+    "seconds": 38.3
+   },
+   {
+    "concentration": {
+     "max_per_symbol": 184.0,
+     "top_decile_share": 0.3356,
+     "zero_share": 0.03
+    },
+    "day": "2022-01-17",
+    "distributions": {
+     "by_role": [
+      {
+       "displayed_vol_中位": 16400.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "全部 帧×档位",
+       "行数": 15756495
+      },
+      {
+       "displayed_vol_中位": 900.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "成交 ≥ 展示量",
+       "行数": 205845
+      },
+      {
+       "displayed_vol_中位": 900.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且后帧仍在",
+       "行数": 51690
+      },
+      {
+       "displayed_vol_中位": 763.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且两帧间无新增委托",
+       "行数": 6626
+      },
+      {
+       "displayed_vol_中位": 700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且落在适用时段内（= 候选）",
+       "行数": 6486
+      }
+     ]
+    },
+    "extra": {
+     "total_cancels": 1488067,
+     "unlinked_cancels": 0
+    },
+    "n_candidates": 6486,
+    "n_rows": 15756495,
+    "n_symbols": 200,
+    "rows_read": {
+     "orders": 5803714,
+     "trades": 4770277,
+     "xinqing": 805672
+    },
+    "seconds": 35.5
+   },
+   {
+    "concentration": {
+     "max_per_symbol": 214.0,
+     "top_decile_share": 0.3277,
+     "zero_share": 0.025
+    },
+    "day": "2022-01-18",
+    "distributions": {
+     "by_role": [
+      {
+       "displayed_vol_中位": 15000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "全部 帧×档位",
+       "行数": 16100619
+      },
+      {
+       "displayed_vol_中位": 900.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "成交 ≥ 展示量",
+       "行数": 208471
+      },
+      {
+       "displayed_vol_中位": 900.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且后帧仍在",
+       "行数": 53723
+      },
+      {
+       "displayed_vol_中位": 700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且两帧间无新增委托",
+       "行数": 6914
+      },
+      {
+       "displayed_vol_中位": 700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且落在适用时段内（= 候选）",
+       "行数": 6789
+      }
+     ]
+    },
+    "extra": {
+     "total_cancels": 1524185,
+     "unlinked_cancels": 0
+    },
+    "n_candidates": 6789,
+    "n_rows": 16100619,
+    "n_symbols": 200,
+    "rows_read": {
+     "orders": 6107180,
+     "trades": 5043923,
+     "xinqing": 827855
+    },
+    "seconds": 45.9
+   },
+   {
+    "concentration": {
+     "max_per_symbol": 148.0,
+     "top_decile_share": 0.3141,
+     "zero_share": 0.01
+    },
+    "day": "2022-01-19",
+    "distributions": {
+     "by_role": [
+      {
+       "displayed_vol_中位": 17000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "全部 帧×档位",
+       "行数": 15879275
+      },
+      {
+       "displayed_vol_中位": 900.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "成交 ≥ 展示量",
+       "行数": 196196
+      },
+      {
+       "displayed_vol_中位": 1000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且后帧仍在",
+       "行数": 50956
+      },
+      {
+       "displayed_vol_中位": 800.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且两帧间无新增委托",
+       "行数": 6358
+      },
+      {
+       "displayed_vol_中位": 800.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且落在适用时段内（= 候选）",
+       "行数": 6249
+      }
+     ]
+    },
+    "extra": {
+     "total_cancels": 1456672,
+     "unlinked_cancels": 0
+    },
+    "n_candidates": 6249,
+    "n_rows": 15879275,
+    "n_symbols": 200,
+    "rows_read": {
+     "orders": 5745467,
+     "trades": 4806775,
+     "xinqing": 809989
+    },
+    "seconds": 36.5
+   },
+   {
+    "concentration": {
+     "max_per_symbol": 225.0,
+     "top_decile_share": 0.3364,
+     "zero_share": 0.01
+    },
+    "day": "2022-01-20",
+    "distributions": {
+     "by_role": [
+      {
+       "displayed_vol_中位": 14300.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "全部 帧×档位",
+       "行数": 15555701
+      },
+      {
+       "displayed_vol_中位": 1000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "成交 ≥ 展示量",
+       "行数": 199688
+      },
+      {
+       "displayed_vol_中位": 1100.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且后帧仍在",
+       "行数": 52395
+      },
+      {
+       "displayed_vol_中位": 800.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且两帧间无新增委托",
+       "行数": 6637
+      },
+      {
+       "displayed_vol_中位": 800.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且落在适用时段内（= 候选）",
+       "行数": 6530
+      }
+     ]
+    },
+    "extra": {
+     "total_cancels": 1612107,
+     "unlinked_cancels": 0
+    },
+    "n_candidates": 6530,
+    "n_rows": 15555701,
+    "n_symbols": 200,
+    "rows_read": {
+     "orders": 6339017,
+     "trades": 5242785,
+     "xinqing": 797383
+    },
+    "seconds": 37.4
+   },
+   {
+    "concentration": {
+     "max_per_symbol": 177.0,
+     "top_decile_share": 0.3483,
+     "zero_share": 0.015
+    },
+    "day": "2022-01-21",
+    "distributions": {
+     "by_role": [
+      {
+       "displayed_vol_中位": 14000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "全部 帧×档位",
+       "行数": 15022751
+      },
+      {
+       "displayed_vol_中位": 800.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "成交 ≥ 展示量",
+       "行数": 189905
+      },
+      {
+       "displayed_vol_中位": 900.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且后帧仍在",
+       "行数": 49143
+      },
+      {
+       "displayed_vol_中位": 700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且两帧间无新增委托",
+       "行数": 6299
+      },
+      {
+       "displayed_vol_中位": 700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且落在适用时段内（= 候选）",
+       "行数": 6193
+      }
+     ]
+    },
+    "extra": {
+     "total_cancels": 1454757,
+     "unlinked_cancels": 0
+    },
+    "n_candidates": 6193,
+    "n_rows": 15022751,
+    "n_symbols": 200,
+    "rows_read": {
+     "orders": 5647770,
+     "trades": 4697022,
+     "xinqing": 771532
+    },
+    "seconds": 35.2
+   },
+   {
+    "concentration": {
+     "max_per_symbol": 229.0,
+     "top_decile_share": 0.3545,
+     "zero_share": 0.02
+    },
+    "day": "2022-01-24",
+    "distributions": {
+     "by_role": [
+      {
+       "displayed_vol_中位": 17700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "全部 帧×档位",
+       "行数": 14846917
+      },
+      {
+       "displayed_vol_中位": 1000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "成交 ≥ 展示量",
+       "行数": 166321
+      },
+      {
+       "displayed_vol_中位": 1000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且后帧仍在",
+       "行数": 44843
+      },
+      {
+       "displayed_vol_中位": 729.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且两帧间无新增委托",
+       "行数": 5330
+      },
+      {
+       "displayed_vol_中位": 700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且落在适用时段内（= 候选）",
+       "行数": 5216
+      }
+     ]
+    },
+    "extra": {
+     "total_cancels": 1344155,
+     "unlinked_cancels": 0
+    },
+    "n_candidates": 5216,
+    "n_rows": 14846917,
+    "n_symbols": 200,
+    "rows_read": {
+     "orders": 5283569,
+     "trades": 4365803,
+     "xinqing": 759606
+    },
+    "seconds": 33.9
+   },
+   {
+    "concentration": {
+     "max_per_symbol": 199.0,
+     "top_decile_share": 0.3176,
+     "zero_share": 0.025
+    },
+    "day": "2022-01-25",
+    "distributions": {
+     "by_role": [
+      {
+       "displayed_vol_中位": 8800.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "全部 帧×档位",
+       "行数": 15513454
+      },
+      {
+       "displayed_vol_中位": 800.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "成交 ≥ 展示量",
+       "行数": 255074
+      },
+      {
+       "displayed_vol_中位": 833.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且后帧仍在",
+       "行数": 66488
+      },
+      {
+       "displayed_vol_中位": 700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且两帧间无新增委托",
+       "行数": 8025
+      },
+      {
+       "displayed_vol_中位": 700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且落在适用时段内（= 候选）",
+       "行数": 7929
+      }
+     ]
+    },
+    "extra": {
+     "total_cancels": 1526399,
+     "unlinked_cancels": 0
+    },
+    "n_candidates": 7929,
+    "n_rows": 15513454,
+    "n_symbols": 200,
+    "rows_read": {
+     "orders": 6168468,
+     "trades": 5315006,
+     "xinqing": 799186
+    },
+    "seconds": 35.3
+   },
+   {
+    "concentration": {
+     "max_per_symbol": 152.0,
+     "top_decile_share": 0.3064,
+     "zero_share": 0.015
+    },
+    "day": "2022-01-26",
+    "distributions": {
+     "by_role": [
+      {
+       "displayed_vol_中位": 9300.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "全部 帧×档位",
+       "行数": 15728987
+      },
+      {
+       "displayed_vol_中位": 700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "成交 ≥ 展示量",
+       "行数": 225962
+      },
+      {
+       "displayed_vol_中位": 700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且后帧仍在",
+       "行数": 55923
+      },
+      {
+       "displayed_vol_中位": 600.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且两帧间无新增委托",
+       "行数": 6961
+      },
+      {
+       "displayed_vol_中位": 600.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且落在适用时段内（= 候选）",
+       "行数": 6873
+      }
+     ]
+    },
+    "extra": {
+     "total_cancels": 1415438,
+     "unlinked_cancels": 0
+    },
+    "n_candidates": 6873,
+    "n_rows": 15728987,
+    "n_symbols": 200,
+    "rows_read": {
+     "orders": 5387416,
+     "trades": 4543560,
+     "xinqing": 814439
+    },
+    "seconds": 34.2
+   },
+   {
+    "concentration": {
+     "max_per_symbol": 204.0,
+     "top_decile_share": 0.2937,
+     "zero_share": 0.01
+    },
+    "day": "2022-01-27",
+    "distributions": {
+     "by_role": [
+      {
+       "displayed_vol_中位": 8900.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "全部 帧×档位",
+       "行数": 15077448
+      },
+      {
+       "displayed_vol_中位": 800.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "成交 ≥ 展示量",
+       "行数": 210093
+      },
+      {
+       "displayed_vol_中位": 900.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且后帧仍在",
+       "行数": 55415
+      },
+      {
+       "displayed_vol_中位": 700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且两帧间无新增委托",
+       "行数": 6636
+      },
+      {
+       "displayed_vol_中位": 700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且落在适用时段内（= 候选）",
+       "行数": 6562
+      }
+     ]
+    },
+    "extra": {
+     "total_cancels": 1382558,
+     "unlinked_cancels": 0
+    },
+    "n_candidates": 6562,
+    "n_rows": 15077448,
+    "n_symbols": 200,
+    "rows_read": {
+     "orders": 5376863,
+     "trades": 4533942,
+     "xinqing": 774132
+    },
+    "seconds": 33.6
+   },
+   {
+    "concentration": {
+     "max_per_symbol": 192.0,
+     "top_decile_share": 0.3546,
+     "zero_share": 0.025
+    },
+    "day": "2022-01-28",
+    "distributions": {
+     "by_role": [
+      {
+       "displayed_vol_中位": 12500.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "全部 帧×档位",
+       "行数": 15511130
+      },
+      {
+       "displayed_vol_中位": 800.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "成交 ≥ 展示量",
+       "行数": 192455
+      },
+      {
+       "displayed_vol_中位": 800.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且后帧仍在",
+       "行数": 47740
+      },
+      {
+       "displayed_vol_中位": 700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且两帧间无新增委托",
+       "行数": 6101
+      },
+      {
+       "displayed_vol_中位": 700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且落在适用时段内（= 候选）",
+       "行数": 5985
+      }
+     ]
+    },
+    "extra": {
+     "total_cancels": 1388858,
+     "unlinked_cancels": 0
+    },
+    "n_candidates": 5985,
+    "n_rows": 15511130,
+    "n_symbols": 200,
+    "rows_read": {
+     "orders": 5117846,
+     "trades": 4330461,
+     "xinqing": 798874
+    },
+    "seconds": 34.4
+   },
+   {
+    "concentration": {
+     "max_per_symbol": 192.0,
+     "top_decile_share": 0.364,
+     "zero_share": 0.025
+    },
+    "day": "2022-02-07",
+    "distributions": {
+     "by_role": [
+      {
+       "displayed_vol_中位": 13700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "全部 帧×档位",
+       "行数": 14958459
+      },
+      {
+       "displayed_vol_中位": 700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "成交 ≥ 展示量",
+       "行数": 192375
+      },
+      {
+       "displayed_vol_中位": 700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且后帧仍在",
+       "行数": 47645
+      },
+      {
+       "displayed_vol_中位": 700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且两帧间无新增委托",
+       "行数": 6107
+      },
+      {
+       "displayed_vol_中位": 700.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且落在适用时段内（= 候选）",
+       "行数": 6009
+      }
+     ]
+    },
+    "extra": {
+     "total_cancels": 1256573,
+     "unlinked_cancels": 0
+    },
+    "n_candidates": 6009,
+    "n_rows": 14958459,
+    "n_symbols": 200,
+    "rows_read": {
+     "orders": 4863038,
+     "trades": 4099475,
+     "xinqing": 777887
+    },
+    "seconds": 32.8
+   },
+   {
+    "concentration": {
+     "max_per_symbol": 264.0,
+     "top_decile_share": 0.3709,
+     "zero_share": 0.03
+    },
+    "day": "2022-05-05",
+    "distributions": {
+     "by_role": [
+      {
+       "displayed_vol_中位": 17200.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "全部 帧×档位",
+       "行数": 16074566
+      },
+      {
+       "displayed_vol_中位": 1000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "成交 ≥ 展示量",
+       "行数": 220525
+      },
+      {
+       "displayed_vol_中位": 1000.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且后帧仍在",
+       "行数": 63877
+      },
+      {
+       "displayed_vol_中位": 900.0,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且两帧间无新增委托",
+       "行数": 6746
+      },
+      {
+       "displayed_vol_中位": 821.5,
+       "frame_gap_ms_中位": 3000.0,
+       "口径": "· 且落在适用时段内（= 候选）",
+       "行数": 6638
+      }
+     ]
+    },
+    "extra": {
+     "total_cancels": 1873323,
+     "unlinked_cancels": 0
+    },
+    "n_candidates": 6638,
+    "n_rows": 16074566,
+    "n_symbols": 200,
+    "rows_read": {
+     "orders": 7187035,
+     "trades": 6163674,
+     "xinqing": 831533
+    },
+    "seconds": 37.6
+   }
+  ],
+  "rows_per_symbol_day": 32.68333333333333,
+  "seconds": 770.9,
+  "symbol_days": 4200
+ },
+ "tool": "probe_density.py",
+ "tool_sha256": "cff51aff2609efc5ae242c965f72297e36096028bad3baad0c40a7cd9c291ee6",
+ "uv_lock_sha256": "d0c5d4bbb55593db06d8df0605d7b6ad85c35be1f5581d2d1444a69495894476",
+ "written_at": "2026-09-03T22:14:02+00:00"
+}

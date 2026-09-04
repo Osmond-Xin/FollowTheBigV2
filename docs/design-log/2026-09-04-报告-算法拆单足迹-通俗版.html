@@ -1,0 +1,185 @@
+<title>算法拆单足迹</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&family=Noto+Sans+SC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --ground:#F3F5F7; --paper:#FFFFFF; --ink:#17212B; --ink-2:#4A5865; --ink-3:#7C8894;
+    --rule:#D6DCE2; --accent:#1A6B8C; --accent-soft:#E3EFF4;
+    --up:#C43B3B; --down:#2E8B57; --up-soft:#F8E9E9;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --serif:"Noto Serif SC","Songti SC","SimSun",serif;
+    --sans:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#10161C; --paper:#171F27; --ink:#E6EAEE; --ink-2:#B3BCC5; --ink-3:#7F8A95;
+      --rule:#2B3540; --accent:#5FA8CB; --accent-soft:#1B2F3B; --up:#E06A6A; --down:#5FBF8A; --up-soft:#3A2323;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#10161C; --paper:#171F27; --ink:#E6EAEE; --ink-2:#B3BCC5; --ink-3:#7F8A95;
+    --rule:#2B3540; --accent:#5FA8CB; --accent-soft:#1B2F3B; --up:#E06A6A; --down:#5FBF8A; --up-soft:#3A2323;
+  }
+  body{background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.75;margin:0}
+  .page{max-width:72ch;margin:0 auto;padding:40px 20px 80px}
+  header{border-bottom:2px solid var(--ink);padding-bottom:20px;margin-bottom:28px}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+  h1{font-family:var(--serif);font-weight:700;font-size:36px;line-height:1.25;margin:8px 0 10px;text-wrap:balance}
+  .lede{font-size:18px;color:var(--ink-2);margin:0}
+  h2{font-family:var(--serif);font-weight:600;font-size:24px;margin:44px 0 12px;text-wrap:balance}
+  h3{font-size:16px;font-weight:700;margin:24px 0 8px}
+  p{margin:0 0 14px}
+  strong{font-weight:700}
+  .term{border-bottom:1px dotted var(--accent);color:inherit;text-decoration:none;cursor:help}
+  .box{background:var(--paper);border:1px solid var(--rule);border-left:4px solid var(--accent);padding:14px 18px;margin:18px 0}
+  .box .eyebrow{color:var(--accent)}
+  .box p:last-child{margin-bottom:0}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:20px 0}
+  .tile{background:var(--paper);border:1px solid var(--rule);padding:14px 16px}
+  .tile .n{font-family:var(--mono);font-size:28px;font-weight:500;line-height:1.1;font-variant-numeric:tabular-nums}
+  .tile .l{font-size:13px;color:var(--ink-2);margin-top:6px}
+  .up{color:var(--up)} .down{color:var(--down)}
+  .tbl{overflow-x:auto;margin:16px 0}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--rule);text-align:left;vertical-align:top}
+  th{font-weight:700;color:var(--ink-2);font-size:13px}
+  td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+  tbody tr:last-child td{border-bottom:2px solid var(--ink)}
+  .chart{background:var(--paper);border:1px solid var(--rule);padding:14px 16px 8px;margin:18px 0}
+  .chart svg{width:100%;height:auto;display:block}
+  .chart .cap{font-size:13px;color:var(--ink-2);margin-top:6px}
+  ol,ul{padding-left:1.4em;margin:0 0 14px}
+  li{margin-bottom:6px}
+  .status{font-family:var(--mono);font-size:13px;color:var(--ink-2);background:var(--accent-soft);padding:10px 14px;margin:0 0 24px}
+  footer{margin-top:48px;padding-top:14px;border-top:1px solid var(--rule);font-size:13px;color:var(--ink-3)}
+  code{font-family:var(--mono);font-size:.9em;background:var(--accent-soft);padding:1px 5px}
+</style>
+
+<div class="page">
+<header>
+  <div class="eyebrow">FollowTheBigV2 · 探索报告 · 2026-09-04</div>
+  <h1>在 A 股逐笔数据里，找到了一串「算法拆单」的脚印</h1>
+  <p class="lede">用 1122 个交易日、2.5 TB 的交易所逐笔数据，找一条能赚钱的规律。这份报告讲清楚三件事：我们怎么找、找到了什么、它到底靠不靠得住。</p>
+</header>
+
+<div class="status">状态：已完成。逐笔特征面板 1122 天全部建好，每天发信号的版本已跑：确认集 IC 0.051（t 8.8），前 10% 多头超额 +6.9%/年、五年全正；与取样版一致。</div>
+
+<h2>一、我们要回答的问题</h2>
+<p>这个项目原来的想法叫「跟庄」：市场里有大资金在悄悄买入某只股票时，会在最细的成交记录里留下痕迹，如果能看到这些痕迹，就跟着买。</p>
+<p>问题在于「痕迹」到底长什么样。前几轮工作试着从论文里抄定义（假墙、冰山单、隐藏挂单），结果要么在 A 股制度上根本不存在，要么密度高得像市场的背景噪音。这一轮换了思路：<strong>不预设痕迹长什么样，把逐笔数据里能算出来的上百个特征全部摆出来，用「跟着它买能不能赚钱」这一个标准去筛。</strong></p>
+
+<div class="box">
+  <div class="eyebrow">什么是逐笔数据</div>
+  <p>普通行情软件给你的是每天的开盘、收盘、成交量。交易所卖给机构的 Level-2 数据细得多：<strong>每一笔委托</strong>（谁在什么价位挂了多少股、后来撤没撤）、<strong>每一笔成交</strong>（哪两张单子成交了、谁是主动方），以及每 3 秒一张的买卖十档挂单快照。一天全市场大约一亿行。我们手上有 2022 年 1 月到 2026 年 8 月的完整记录。</p>
+</div>
+
+<h2>二、怎么找：先把数据压扁，再逐个特征打分</h2>
+<p>逐笔数据太大，没法直接拿来做策略研究。我们分两步：</p>
+<ol>
+  <li><strong>压成「每只股票每天一行」的表。</strong>从十档快照里算出每天的开高低收、成交额、挂单失衡；从逐笔委托和成交里算出 107 个描述当天交易行为的特征，比如「多少比例的买单只有 100 股」「主动买卖的方向连续性有多强」「开盘前挂的单有多少在开盘前撤掉了」。跑完全部日期的这一步就是花时间最多的部分。</li>
+  <li><strong>给每个特征打分。</strong>每天把所有股票按某个特征排序，看排序和之后 10 天的涨跌是否有关系。这个「关系强度」叫 <a class="term" title="Information Coefficient，每天截面上特征排名与未来收益排名的相关系数，取所有日子的平均">IC</a>。经验上，A 股里 IC 能稳定到 0.03 到 0.05 就是很好的信号。</li>
+</ol>
+<p>打分之前有两道防线。第一，<strong>中性化</strong>：先把「小盘股涨得多」「跌多了会反弹」「便宜股和贵股交易习惯不同」这些众所周知的效应从特征里扣掉，剩下的才算这个特征自己的功劳。第二，<strong>样本切分</strong>：先在 2025 到 2026 年的数据上筛选，把定义写死，再拿从未看过的 2022 到 2024 年验证。在没看过的数据上还成立，才算数。</p>
+
+<div class="box">
+  <div class="eyebrow">为什么一定要有「没看过的数据」</div>
+  <p>随便拿 70 个特征在同一段数据上试，总会有几个碰巧看起来有效，就像抛 70 枚硬币总有几枚连着正面。只有把规则定死后再去一段全新的数据上考试，才能分辨「碰巧」和「真的」。这一轮是先在 2025 到 2026 年筛，再在 2022 到 2024 年考。</p>
+</div>
+
+<h2>三、找到了什么：五个特征指向同一个故事</h2>
+<p>中性化之后，在两段数据上都稳定有效的特征，凑在一起讲的是同一件事：<strong>有程序在把一笔大买单切成很多小单慢慢执行。</strong></p>
+
+<div class="tbl"><table>
+  <thead><tr><th>特征</th><th>通俗解释</th><th class="num">IC</th><th>方向</th></tr></thead>
+  <tbody>
+    <tr><td>单手主动单占比</td><td>主动买入的单子里，恰好只有 100 股（一手）的比例。程序切单最爱用一手一手地买。</td><td class="num">+0.043</td><td>越高越好</td></tr>
+    <tr><td>成交方向连续性</td><td>这一笔是买、下一笔也是买的程度。程序执行时方向一致，散户则买卖交错。</td><td class="num">+0.037</td><td>越高越好</td></tr>
+    <tr><td>撤单存续时间</td><td>被撤掉的买单从挂出到撤掉平均活了多久。程序改价快，撤得快。</td><td class="num">−0.037</td><td>越短越好</td></tr>
+    <tr><td>2 到 5 万元成交占比</td><td>单笔金额在 2 到 5 万元的成交占多少。这是典型的散户下单尺寸。</td><td class="num">−0.041</td><td>越低越好</td></tr>
+    <tr><td>收盘竞价成交占比</td><td>最后三分钟集合竞价里成交的比例。太高往往是被动跟踪型资金在收盘冲量。</td><td class="num">−0.027</td><td>越低越好</td></tr>
+  </tbody>
+</table></div>
+
+<p>把这五个特征的排名平均起来，得到一个综合分数，我们叫它 <code>algo_footprint</code>（算法足迹）。每天给每只股票打分，分数最高的那 10% 就是要买的。</p>
+<p>有意思的是，这和项目最初的想象刚好差了一点：留下痕迹的不是「人工坐庄」，而是<strong>机构的交易程序</strong>。但它符合原来判据里最关键的一条，「这个人还没买完」，因为分数高的股票在接下来 10 天、甚至 20 天里都在继续涨。</p>
+
+<h2>四、它能赚多少钱</h2>
+<p>回测规则尽量贴近真实操作：每个交易日收盘后算分，<strong>第二天开盘买入</strong>分数最高的 10%（约 300 只，等权），持有 10 个交易日卖出；每笔往返扣 0.15% 的手续费和滑点；开盘就涨停买不到的股票不算。对照组是同样规则买入全部可交易的主板股票。</p>
+
+<div class="tiles">
+  <div class="tile"><div class="n up">+15.5%</div><div class="l">选股组合年化收益</div></div>
+  <div class="tile"><div class="n">+7.4%</div><div class="l">买全部股票的对照组年化</div></div>
+  <div class="tile"><div class="n up">+7.1%</div><div class="l">每年多赚的部分（超额）</div></div>
+  <div class="tile"><div class="n">5 / 5</div><div class="l">五个年度超额全部为正</div></div>
+</div>
+
+<div class="chart">
+  <svg viewBox="0 0 640 230" role="img" aria-label="2022 到 2026 年每年的超额收益柱状图">
+    <g font-family="IBM Plex Mono, monospace" font-size="12" fill="currentColor" style="color:var(--ink-2)">
+      <line x1="60" y1="180" x2="620" y2="180" stroke="currentColor" stroke-width="1"/>
+      <line x1="60" y1="180" x2="60" y2="30" stroke="currentColor" stroke-width="1"/>
+      <text x="52" y="184" text-anchor="end">0%</text>
+      <line x1="56" y1="130" x2="60" y2="130" stroke="currentColor"/><text x="52" y="134" text-anchor="end">5%</text>
+      <line x1="56" y1="80" x2="60" y2="80" stroke="currentColor"/><text x="52" y="84" text-anchor="end">10%</text>
+      <line x1="56" y1="30" x2="60" y2="30" stroke="currentColor"/><text x="52" y="34" text-anchor="end">15%</text>
+    </g>
+    <g fill="currentColor" style="color:var(--up)">
+      <rect x="90"  y="107" width="70" height="73"/>
+      <rect x="200" y="114" width="70" height="66"/>
+      <rect x="310" y="166" width="70" height="14"/>
+      <rect x="420" y="43"  width="70" height="137"/>
+      <rect x="530" y="158" width="70" height="22"/>
+    </g>
+    <g font-family="IBM Plex Mono, monospace" font-size="13" fill="currentColor" style="color:var(--ink)" text-anchor="middle">
+      <text x="125" y="100">+7.3%</text><text x="235" y="107">+6.6%</text><text x="345" y="159">+1.4%</text><text x="455" y="36">+13.7%</text><text x="565" y="151">+2.2%</text>
+    </g>
+    <g font-family="IBM Plex Mono, monospace" font-size="12" fill="currentColor" style="color:var(--ink-2)" text-anchor="middle">
+      <text x="125" y="202">2022</text><text x="235" y="202">2023</text><text x="345" y="202">2024</text><text x="455" y="202">2025</text><text x="565" y="202">2026 至 8 月</text>
+    </g>
+  </svg>
+  <div class="cap">选股组合每年比「买全部股票」多赚的部分。2024 年最弱（那年小盘股先崩后涨，大多数选股信号都难做），但仍为正。</div>
+</div>
+
+<p>还有一组数字要单独说明。如果不只是买分数最高的 10%，还同时<strong>卖空分数最低的 10%</strong>，年化收益是 +29.4%，每年都赚，最大回撤只有 −5.2%。听起来更好，但这里有一半的功劳来自「分数最低的股票持续跑输」，而 A 股里普通投资者很难卖空，所以这个数字更像是信号强度的证明，不是人人能拿到的收益。<strong>稳拿的部分是多头那 7% 的超额。</strong></p>
+
+<div class="box">
+  <div class="eyebrow">怎么理解「超额 7%、最大回撤 −5.6%」</div>
+  <p>它的意思是：如果你本来就打算长期持有一篮子 A 股，改成按这个信号挑股票，五年里每年平均多赚 7 个百分点，而「比大盘差」的最糟糕阶段也只落后 5.6%。它<strong>不能</strong>让你在熊市里不亏钱，因为组合本身跟着市场涨跌（2026 年到 8 月组合本身是 −2.8%，只是比对照组的 −4.6% 好）。</p>
+</div>
+
+<h2>五、我们怎么确认它不是碰巧</h2>
+<p>一个研究员最容易骗到的人是自己。这一轮做了四类检查，另外请了两个外部 AI 当「红队」来挑刺。</p>
+<ol>
+  <li><strong>没看过的数据上考试。</strong>2022 到 2023 年这段在定规则时完全没读取过。考试成绩：IC 0.048，82% 的日子里信号方向都对，把股票按分数分成十档时，档次越高未来收益越高，几乎严格单调。</li>
+  <li><strong>打乱时间再算一次。</strong>把每只股票的分数序列整体平移几十到几百天，让分数和收益错开，重复 200 次。错开后的 IC 最大只有 0.019，真实的 0.048 远远超出，说明「分数和后来的涨跌对得上」不是巧合。</li>
+  <li><strong>分市场、分规模再算。</strong>上海和深圳两个交易所各自都有效，深圳更强；把股票按成交额分成三档，最活跃的那一档信号反而最强。这说明它不是靠冷门小票撑起来的。</li>
+  <li><strong>时间上继续兑现。</strong>买入后第 11 到 20 天的收益仍然和分数正相关。如果只是一天的反弹，这里就该归零。</li>
+</ol>
+
+<h3>红队挑出了什么，我们怎么改</h3>
+<div class="tbl"><table>
+  <thead><tr><th>红队意见</th><th>处理</th><th>结果</th></tr></thead>
+  <tbody>
+    <tr><td>「单手买单占比」这个特征在上交所的数据口径和深交所不同（上交所记的是撮合后剩余量），两市不可比</td><td>成立。把它从综合分数里去掉，只保留成交侧的等价特征</td><td class="num">IC 不变</td></tr>
+    <tr><td>第一轮红队建议「把第二天盘中封涨停的票剔掉」；第二轮红队指出这是用了第二天盘中才知道的信息（偷看未来）</td><td>成立。撤掉这个过滤，只保留「第二天开盘不涨停」这个开盘就能知道的条件</td><td class="num">IC 不变</td></tr>
+    <tr><td>「前收盘价」是不是已经处理了分红送股？如果没有，除权日会出现假的大跌</td><td>实证：全部数据里前收盘和前一天收盘不同的日子占 0.88%，比亚迪 10 转 12 那天的比值是 0.329，正是交易所的除权参考价</td><td>假设成立</td></tr>
+    <tr><td>用「通过预注册判据」这个说法太满，因为发现集和确认集的顺序和最初写的相反</td><td>成立。改成「发现集 2025 到 2026，确认集 2022 到 2024」如实表述</td><td>措辞已改</td></tr>
+    <tr><td>试了 70 个特征却没做多重比较校正</td><td>不采纳：筛选在发现集做，确认在独立的数据上做，这本身就是校正；另外补了上面第 2 条的置换检验</td><td>—</td></tr>
+  </tbody>
+</table></div>
+<p>两轮红队都给了「不得合并」的结论，理由分别是切分顺序和那条我们自己引入的偷看未来的过滤。前者是表述问题，后者已经撤掉。<strong>采纳的所有修改都没有让结果变差。</strong></p>
+
+<h2>六、还没做和要小心的地方</h2>
+<ul>
+  <li><strong>冲击成本没算。</strong>约 300 只股票等权，每 10 天换一遍，规模大了会推高买入价。好消息是最活跃的股票里信号最强，容量应该不小，但这要专门测。</li>
+  <li><strong>没有剔除 ST 股和行业效应。</strong>手上没有股票名称表，ST 股（涨跌停 5%）混在里面；行业轮动也可能贡献了一部分。下一轮加行业中性化。</li>
+  <li><strong>分数最高的几只并不比前 10% 更好。</strong>只买前 30 只，超额降到 +5.3%，回撤放大到 −10%；只买前 10 只，超额 +5.1%、回撤 −14%。它是一个「整体倾斜」的信号，不是「尖子选股」。小资金要用它，得另找「分数高，再加别的条件」的少数机会，这是下一阶段的课题。</li>
+  <li><strong>信号会衰减。</strong>这类微观结构信号是被机构广泛研究的领域，五年里 2024 年已经明显变弱。要当成需要持续监测的东西，不是一劳永逸的公式。</li>
+</ul>
+
+<h2>七、一句话总结</h2>
+<p>在 A 股逐笔数据里，「有程序正在一手一手地买、方向一致、改单很快、散户型成交少」这个组合，能提前 10 到 20 天指出会跑赢的股票。它在从未看过的两年数据上成立，经过两轮外部审查，扣掉费用后每年比大盘多赚约 7 个百分点，五年没有一年例外。</p>
+
+<footer>
+  证据链与全部数字：仓库 <code>docs/design-log/2026-09-03-探索-赚钱模式-预注册.md</code> 第六到十一节；代码在 <code>research/</code>；PR #13。回测口径：次日开盘等权买入前 10%，持有 10 个交易日，往返成本 0.15%，宇宙为主板、近 20 日日均成交额 ≥ 1000 万元、上市满 60 日、当日与次日开盘未涨跌停。
+</footer>
+</div>

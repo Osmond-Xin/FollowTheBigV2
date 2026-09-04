@@ -9,6 +9,7 @@ from ftbv2.core.raw.schema import (
     AM_START_MS,
     CSV_NAME,
     FIELDS,
+    LOT_SIZE,
     MAIN_PREFIXES,
     PM_END_MS,
     PM_START_MS,
@@ -45,7 +46,7 @@ from ftbv2.core.raw.types import (
 
 __all__ = [
     "ACTIONS", "AM_END_MS", "AM_START_MS", "CONTINUOUS_EXCL_AUCTIONS", "CSV_NAME", "Catalog", "Day", "Defect", "DefectCode",
-    "DefectLedger", "FIELDS", "Field", "FileMeta", "FilePlan", "Gap", "GapReason", "IngestReceipt", "KINDS", "Kind", "LIVE",
+    "DefectLedger", "FIELDS", "Field", "FileMeta", "FilePlan", "Gap", "GapReason", "IngestReceipt", "KINDS", "Kind", "LIVE", "LOT_SIZE",
     "MAIN_PREFIXES", "PM_END_MS", "PM_START_MS", "PRICE_SCALE", "Quality", "ROW_GROUP_ROWS", "ReadRequest", "ReadResult",
     "ReadStats", "RowGroupMeta", "STATUSES", "STREAMS", "SYMBOL_COL", "ScanPlan", "Stream", "StreamReceipt", "Window",
     "archive_day", "attribute_gaps", "decode_field", "field", "in_windows", "manifest_relpath", "output_dtype", "parquet_relpath",

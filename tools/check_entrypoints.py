@@ -15,7 +15,8 @@ import sys
 import tomllib
 from pathlib import Path
 
-SKIP_DIRS = {".venv", ".git", ".redteam", ".crapkit", "__pycache__", ".pytest_cache", ".ruff_cache", "node_modules"}
+SKIP_DIRS = {".venv", ".git", ".redteam", ".crapkit", "__pycache__", ".pytest_cache", ".ruff_cache", "node_modules",
+             "research"}   # research/ 是探索沙箱（2026-09-03 用户裁定不设限），不是工具；进 tools/ 之前先经此门
 FORBIDDEN_DIRS = {"scripts", "bin", "notebooks"}
 CLI_MODULES = {"argparse", "click", "typer"}
 ADAPTER_MAX_LINES = 120
