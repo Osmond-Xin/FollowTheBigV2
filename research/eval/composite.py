@@ -19,6 +19,8 @@ SPECS: dict[str, tuple[tuple[str, int], ...]] = {
                        ("r_share_b2", -1), ("t_amt_share_close_call", -1)),
     "algo_footprint_3": (("qf_lot1_b", +1), ("t_sign_ac1", +1), ("q_life_med_b", -1)),
     "lot1_only": (("qf_lot1_b", +1),),
+    # 2026-09-04 看过 2024 之后定的精简版：只留 2024 也同号显著的成分；2022–2023 对它仍是干净的确认集
+    "core": (("qf_lot1_b", +1), ("t_sign_ac1", +1), ("pre_cx_b", -1), ("rkurt", -1)),
 }
 
 
