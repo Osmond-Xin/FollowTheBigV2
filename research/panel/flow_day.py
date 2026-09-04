@@ -62,7 +62,7 @@ def _bucket_expr(amt_col: str) -> pl.Expr:
 
 # ---- trades features ----
 
-def features_trades(trades: pl.DataFrame) -> pl.DataFrame:
+def features_trades(trades: pl.DataFrame) -> pl.DataFrame:  # noqa: PLR0915
     """trades: 一天的 trades stream（已带 day/symbol），输出 (day, symbol, 60+ 列)。"""
     t = trades.filter(pl.col("vol") > 0)
     t = t.with_columns(_mkt(pl.col("symbol")).alias("mkt"))
@@ -161,7 +161,7 @@ def features_trades(trades: pl.DataFrame) -> pl.DataFrame:
         agg_sell=pl.col("bs") == "S",
     )
 
-    # aggressor: per (symbol, agg_oid)
+    # 主动方：按 (symbol, 主动方委托号) 聚合
     agg_per = fills.group_by("day", "symbol", "agg_oid").agg(
         a_amt=pl.col("agg_amt").sum(),
         a_vol=pl.col("agg_vol").sum(),
