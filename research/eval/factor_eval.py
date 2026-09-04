@@ -365,6 +365,8 @@ def battery(
                 icsum = ic_summary(ic_df, lag=N)
                 q = quantile_returns(neu, fac, h)
                 gross = q["decile_ann_ret"].get(10, float("nan"))
+                gross_bot = q["decile_ann_ret"].get(1, float("nan"))
+                net_bot = gross_bot - (ANN_DAYS / N) * COST_PER_ROUND_TRIP if gross_bot == gross_bot else float("nan")
                 t = turn_d["avg_daily_turnover"]
                 # 持有 N 日、到期全换的成本上界：每年 244/N 次往返；日频换手率 t 只作参考列。
                 net = gross - (ANN_DAYS / N) * COST_PER_ROUND_TRIP if gross == gross else float("nan")
@@ -372,7 +374,7 @@ def battery(
                     "factor": fac, "horizon": h, "mean_ic": icsum["mean"], "icir": icsum["icir"],
                     "t_nw": icsum["t_nw"], "pct_pos": icsum["pct_pos"],
                     "q_spread_ann": q["spread_ann"], "t_spread": q["t_spread"], "sharpe": q["sharpe"],
-                    "top_decile_gross": gross, "turnover": t, "top_decile_net": net,
+                    "top_decile_gross": gross, "turnover": t, "top_decile_net": net, "bot_decile_net": net_bot,
                     "monotonic": q["monotonic"], "n_days": icsum["n_days"],
                 })
     out = pl.DataFrame(rows)
