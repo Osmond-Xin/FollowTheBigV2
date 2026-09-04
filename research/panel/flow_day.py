@@ -283,7 +283,7 @@ def features_trades(trades: pl.DataFrame) -> pl.DataFrame:  # noqa: PLR0915
             t_n_sign=pl.col("sign").abs().sum().cast(pl.Int64),
             t_sign_prod=pl.col("prod").sum(),
             t_sign_sq=pl.col("prev_sign").abs().sum(),   # = N-1 non-null prev_sign
-            t_n_runs=pl.col("run_id").max(),
+            t_n_runs=pl.col("run_id").n_unique(),   # rle_id 从 0 起；codex 红队指出 max() 差一（2026-09-04）
         )
         .with_columns(
             t_sign_ac1=pl.when(pl.col("t_sign_sq") > 0).then(
