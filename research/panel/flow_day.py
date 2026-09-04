@@ -700,6 +700,7 @@ def main() -> int:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--workers", type=int, default=3)
     ap.add_argument("--days", type=dt.date.fromisoformat, nargs="*")
+    ap.add_argument("--stride", type=int, default=1, help="每隔 k 天取一天（IC 筛选不需要连续日）")
     ap.add_argument("--reverse", action="store_true")
     a = ap.parse_args()
     a.out.mkdir(parents=True, exist_ok=True)
@@ -707,6 +708,8 @@ def main() -> int:
     days = tuple(a.days) if a.days else RawStore(ROOT, ledger).days()
     if a.reverse:
         days = tuple(reversed(days))
+    if a.stride > 1:
+        days = days[::a.stride]
     jobs = [(d, a.out) for d in days]
     if a.workers <= 1:
         for j in jobs:
